@@ -1,11 +1,11 @@
 pub mod routes;
 
 use argon2::{
+    password_hash::{rand_core::OsRng, SaltString},
     Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
-    password_hash::{SaltString, rand_core::OsRng},
 };
 use chrono::{Duration, Utc};
-use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
+use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -63,10 +63,7 @@ pub fn issue_token(
     )
 }
 
-pub fn decode_token(
-    token: &str,
-    secret: &[u8],
-) -> Result<Claims, jsonwebtoken::errors::Error> {
+pub fn decode_token(token: &str, secret: &[u8]) -> Result<Claims, jsonwebtoken::errors::Error> {
     Ok(decode::<Claims>(
         token,
         &DecodingKey::from_secret(secret),
