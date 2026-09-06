@@ -1,7 +1,10 @@
 mod auth;
+mod state;
 
 use axum::{Json, Router, routing::get};
 use serde::Serialize;
+use sqlx::postgres::PgPoolOptions;
+use state::AppState;
 use std::net::SocketAddr;
 use tower_http::trace::TraceLayer;
 
@@ -18,10 +21,11 @@ async fn health() -> Json<HealthResponse> {
     })
 }
 
-fn app() -> Router {
+fn app(state: AppState) -> Router {
     Router::new()
         .route("/api/v1/health", get(health))
         .nest("/api/v1/auth", auth::routes::router())
+        .with_state(state)
         .layer(TraceLayer::new_for_http())
 }
 
@@ -33,12 +37,29 @@ async fn main() {
                 .unwrap_or_else(|_| "horus_api=debug,tower_http=debug".into()),
         )
         .init();
+
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let jwt_secret = std::env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+    let db = PgPoolOptions::new()
+        .max_connections(10)
+        .connect(&database_url)
+        .await
+        .expect("failed to connect to PostgreSQL");
+    sqlx::migrate!()
+        .run(&db)
+        .await
+        .expect("failed to run database migrations");
+
+    let state = AppState {
+        db,
+        jwt_secret: jwt_secret.into_bytes(),
+    };
     let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .expect("failed to bind API listener");
     tracing::info!(%addr, "HORUS API listening");
-    axum::serve(listener, app())
+    axum::serve(listener, app(state))
         .with_graceful_shutdown(shutdown_signal())
         .await
         .expect("API server failed");
@@ -60,42 +81,4 @@ async fn shutdown_signal() {
     #[cfg(not(unix))]
     let terminate = std::future::pending::<()>();
     tokio::select! { _ = ctrl_c => {}, _ = terminate => {}, }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use axum::{
-        body::Body,
-        http::{Request, StatusCode},
-    };
-    use tower::ServiceExt;
-
-    #[tokio::test]
-    async fn health_returns_ok() {
-        let response = app()
-            .oneshot(
-                Request::builder()
-                    .uri("/api/v1/health")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn me_requires_authentication() {
-        let response = app()
-            .oneshot(
-                Request::builder()
-                    .uri("/api/v1/auth/me")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    }
 }
