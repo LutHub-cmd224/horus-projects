@@ -1,3 +1,5 @@
+pub mod routes;
+
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::{SaltString, rand_core::OsRng}};
 use chrono::{Duration, Utc};
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
@@ -5,12 +7,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Claims {
-    pub sub: Uuid,
-    pub exp: usize,
-    pub iat: usize,
-    pub token_type: TokenType,
-}
+pub struct Claims { pub sub: Uuid, pub exp: usize, pub iat: usize, pub token_type: TokenType }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -22,9 +19,7 @@ pub fn hash_password(password: &str) -> Result<String, argon2::password_hash::Er
 }
 
 pub fn verify_password(password: &str, hash: &str) -> bool {
-    PasswordHash::new(hash)
-        .ok()
-        .is_some_and(|parsed| Argon2::default().verify_password(password.as_bytes(), &parsed).is_ok())
+    PasswordHash::new(hash).ok().is_some_and(|parsed| Argon2::default().verify_password(password.as_bytes(), &parsed).is_ok())
 }
 
 pub fn issue_token(user_id: Uuid, token_type: TokenType, secret: &[u8]) -> Result<String, jsonwebtoken::errors::Error> {
@@ -41,14 +36,12 @@ pub fn decode_token(token: &str, secret: &[u8]) -> Result<Claims, jsonwebtoken::
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
     fn password_round_trip() {
         let hash = hash_password("correct horse battery staple").unwrap();
         assert!(verify_password("correct horse battery staple", &hash));
         assert!(!verify_password("wrong", &hash));
     }
-
     #[test]
     fn access_token_round_trip() {
         let id = Uuid::now_v7();
