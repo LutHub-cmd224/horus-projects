@@ -75,14 +75,14 @@ async fn register_create_project_and_load_overview() {
     let access_token = auth["access_token"].as_str().unwrap();
 
     let (status, workspaces) =
-        json_request(&app, "GET", "/api/v1/workspaces/", Some(access_token), None).await;
+        json_request(&app, "GET", "/api/v1/workspaces", Some(access_token), None).await;
     assert_eq!(status, StatusCode::OK);
     let workspace_id = workspaces[0]["id"].as_str().unwrap();
 
     let (status, project) = json_request(
         &app,
         "POST",
-        "/api/v1/projects/",
+        "/api/v1/projects",
         Some(access_token),
         Some(json!({
             "workspace_id": workspace_id,
