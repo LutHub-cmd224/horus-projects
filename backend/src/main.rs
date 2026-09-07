@@ -9,6 +9,9 @@ mod state;
 mod tasks;
 mod workspaces;
 
+#[cfg(test)]
+mod integration_tests;
+
 use axum::{Json, Router, routing::get};
 use serde::Serialize;
 use sqlx::postgres::PgPoolOptions;

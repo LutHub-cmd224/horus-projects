@@ -8,6 +8,23 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: horus
+          POSTGRES_PASSWORD: horus
+          POSTGRES_DB: horus_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U horus -d horus_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://horus:horus@localhost:5432/horus_test
+      JWT_SECRET: ci-integration-secret-at-least-32-bytes
     defaults:
       run:
         working-directory: backend

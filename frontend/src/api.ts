@@ -74,13 +74,13 @@ export const api = {
       body: JSON.stringify({ email, password, display_name: displayName || null }),
     }),
   me: (token: string) => request<User>('/auth/me', {}, token),
-  projects: (token: string) => request<Project[]>('/projects/', {}, token),
-  workspaces: (token: string) => request<Workspace[]>('/workspaces/', {}, token),
+  projects: (token: string) => request<Project[]>('/projects', {}, token),
+  workspaces: (token: string) => request<Workspace[]>('/workspaces', {}, token),
   overview: (projectId: string, token: string) =>
     request<ProjectOverview>(`/projects/${projectId}/overview`, {}, token),
   createProject: (workspaceId: string, name: string, description: string, token: string) =>
     request<Project>(
-      '/projects/',
+      '/projects',
       {
         method: 'POST',
         body: JSON.stringify({
