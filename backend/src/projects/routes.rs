@@ -130,7 +130,11 @@ async fn create_project(
     if base_slug.is_empty() {
         return Err(StatusCode::UNPROCESSABLE_ENTITY);
     }
-    let slug = format!("{}-{}", base_slug, &Uuid::now_v7().simple().to_string()[..8]);
+    let slug = format!(
+        "{}-{}",
+        base_slug,
+        &Uuid::now_v7().simple().to_string()[..8]
+    );
 
     let mut tx = state
         .db
