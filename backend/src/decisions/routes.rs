@@ -343,7 +343,10 @@ mod tests {
     #[test]
     fn decision_values_are_validated() {
         assert_eq!(normalize_status(None).unwrap(), "PROPOSED");
-        assert_eq!(normalize_status(Some("accepted".into())).unwrap(), "ACCEPTED");
+        assert_eq!(
+            normalize_status(Some("accepted".into())).unwrap(),
+            "ACCEPTED"
+        );
         assert!(normalize_status(Some("unknown".into())).is_err());
         assert!(validate_alternatives(&json!([])).is_ok());
         assert!(validate_alternatives(&json!({})).is_err());
