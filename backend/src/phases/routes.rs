@@ -238,11 +238,12 @@ async fn update_criterion(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let phase_status = sqlx::query_scalar::<_, String>("SELECT status::text FROM phases WHERE id = $1")
-        .bind(phase_id)
-        .fetch_one(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let phase_status =
+        sqlx::query_scalar::<_, String>("SELECT status::text FROM phases WHERE id = $1")
+            .bind(phase_id)
+            .fetch_one(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     if phase_status == "LOCKED" || phase_status == "VALIDATED" {
         return Err(StatusCode::CONFLICT);
     }
@@ -345,13 +346,11 @@ async fn validate_phase(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     } else {
-        sqlx::query(
-            "UPDATE projects SET status = 'COMPLETED', updated_at = now() WHERE id = $1",
-        )
-        .bind(project_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        sqlx::query("UPDATE projects SET status = 'COMPLETED', updated_at = now() WHERE id = $1")
+            .bind(project_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
 
     tx.commit()
