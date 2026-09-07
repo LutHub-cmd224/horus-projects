@@ -126,10 +126,7 @@ fn normalize_priority(value: Option<String>) -> Result<String, StatusCode> {
 }
 
 fn normalize_status(value: Option<String>) -> Result<String, StatusCode> {
-    let value = value
-        .unwrap_or_else(|| "TODO".into())
-        .trim()
-        .to_uppercase();
+    let value = value.unwrap_or_else(|| "TODO".into()).trim().to_uppercase();
     if matches!(
         value.as_str(),
         "TODO" | "IN_PROGRESS" | "BLOCKED" | "DONE" | "CANCELLED"
