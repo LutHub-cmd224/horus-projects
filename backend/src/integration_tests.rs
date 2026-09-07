@@ -28,7 +28,11 @@ async fn json_request(
     let payload = body
         .map(|value| Body::from(value.to_string()))
         .unwrap_or_else(Body::empty);
-    let response = app.clone().oneshot(builder.body(payload).unwrap()).await.unwrap();
+    let response = app
+        .clone()
+        .oneshot(builder.body(payload).unwrap())
+        .await
+        .unwrap();
     let status = response.status();
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     let value = if bytes.is_empty() {
@@ -70,14 +74,8 @@ async fn register_create_project_and_load_overview() {
     assert_eq!(status, StatusCode::CREATED);
     let access_token = auth["access_token"].as_str().unwrap();
 
-    let (status, workspaces) = json_request(
-        &app,
-        "GET",
-        "/api/v1/workspaces/",
-        Some(access_token),
-        None,
-    )
-    .await;
+    let (status, workspaces) =
+        json_request(&app, "GET", "/api/v1/workspaces/", Some(access_token), None).await;
     assert_eq!(status, StatusCode::OK);
     let workspace_id = workspaces[0]["id"].as_str().unwrap();
 
