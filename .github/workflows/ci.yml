@@ -25,6 +25,7 @@ jobs:
     env:
       DATABASE_URL: postgres://horus:horus@localhost:5432/horus_test
       JWT_SECRET: ci-integration-secret-at-least-32-bytes
+      FRONTEND_ORIGIN: http://localhost:3000
     defaults:
       run:
         working-directory: backend
@@ -54,3 +55,11 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - run: npm test
+
+  production-images:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t horus-api:ci ./backend
+      - run: docker build --build-arg VITE_API_URL=https://api.example.com/api/v1 -t horus-web:ci ./frontend

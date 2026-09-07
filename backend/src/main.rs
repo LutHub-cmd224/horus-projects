@@ -12,7 +12,11 @@ mod workspaces;
 #[cfg(test)]
 mod integration_tests;
 
-use axum::{Json, Router, routing::get};
+use axum::{
+    Json, Router,
+    http::{HeaderValue, Method, header},
+    routing::get,
+};
 use serde::Serialize;
 use sqlx::postgres::PgPoolOptions;
 use state::AppState;
@@ -32,6 +36,25 @@ async fn health() -> Json<HealthResponse> {
     })
 }
 
+fn cors_layer() -> CorsLayer {
+    let frontend_origin =
+        std::env::var("FRONTEND_ORIGIN").unwrap_or_else(|_| "http://localhost:3000".to_string());
+    let origin = frontend_origin
+        .parse::<HeaderValue>()
+        .expect("FRONTEND_ORIGIN must be a valid HTTP origin");
+
+    CorsLayer::new()
+        .allow_origin(origin)
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PATCH,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE])
+}
+
 fn app(state: AppState) -> Router {
     Router::new()
         .route("/api/v1/health", get(health))
@@ -45,7 +68,7 @@ fn app(state: AppState) -> Router {
         .nest("/api/v1", decisions::routes::router())
         .nest("/api/v1", overview::routes::router())
         .with_state(state)
-        .layer(CorsLayer::permissive())
+        .layer(cors_layer())
         .layer(TraceLayer::new_for_http())
 }
 
