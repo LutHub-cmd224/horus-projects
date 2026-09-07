@@ -1,5 +1,6 @@
 mod auth;
 mod state;
+mod workspaces;
 
 use axum::{Json, Router, routing::get};
 use serde::Serialize;
@@ -25,6 +26,7 @@ fn app(state: AppState) -> Router {
     Router::new()
         .route("/api/v1/health", get(health))
         .nest("/api/v1/auth", auth::routes::router())
+        .nest("/api/v1/workspaces", workspaces::routes::router())
         .with_state(state)
         .layer(TraceLayer::new_for_http())
 }
