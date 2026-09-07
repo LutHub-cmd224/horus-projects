@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-horus}
+      POSTGRES_USER: ${POSTGRES_USER:-horus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - horus_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-horus} -d ${POSTGRES_DB:-horus}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-horus}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-horus}
+      JWT_SECRET: ${JWT_SECRET}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN}
+      RUST_LOG: ${RUST_LOG:-horus_api=info,tower_http=info}
+    expose:
+      - "8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-3000}:80"
+    depends_on:
+      - api
+
+volumes:
+  horus_postgres_data:
