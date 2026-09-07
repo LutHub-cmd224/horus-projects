@@ -202,7 +202,10 @@ async fn update_deliverable(
         Some(value) => Some(normalize_status(Some(value))?),
         None => None,
     };
-    if payload.title.as_deref().is_some_and(|value| value.trim().is_empty())
+    if payload
+        .title
+        .as_deref()
+        .is_some_and(|value| value.trim().is_empty())
         || payload
             .deliverable_type
             .as_deref()
