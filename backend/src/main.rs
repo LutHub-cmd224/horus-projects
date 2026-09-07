@@ -1,4 +1,5 @@
 mod auth;
+mod projects;
 mod state;
 mod workspaces;
 
@@ -27,6 +28,7 @@ fn app(state: AppState) -> Router {
         .route("/api/v1/health", get(health))
         .nest("/api/v1/auth", auth::routes::router())
         .nest("/api/v1/workspaces", workspaces::routes::router())
+        .nest("/api/v1/projects", projects::routes::router())
         .with_state(state)
         .layer(TraceLayer::new_for_http())
 }
