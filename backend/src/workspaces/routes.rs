@@ -37,7 +37,10 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list_workspaces))
         .route("/{workspace_id}/members", get(list_members))
-        .route("/{workspace_id}/members/{user_id}", patch(update_member_role))
+        .route(
+            "/{workspace_id}/members/{user_id}",
+            patch(update_member_role),
+        )
 }
 
 fn authenticated_user(request: &Request, state: &AppState) -> Result<Uuid, StatusCode> {
