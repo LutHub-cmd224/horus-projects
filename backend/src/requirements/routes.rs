@@ -123,7 +123,10 @@ fn normalize_type(value: String) -> Result<String, StatusCode> {
 }
 
 fn normalize_priority(value: Option<String>) -> Result<String, StatusCode> {
-    let value = value.unwrap_or_else(|| "MEDIUM".into()).trim().to_uppercase();
+    let value = value
+        .unwrap_or_else(|| "MEDIUM".into())
+        .trim()
+        .to_uppercase();
     if matches!(value.as_str(), "LOW" | "MEDIUM" | "HIGH" | "CRITICAL") {
         Ok(value)
     } else {
@@ -132,7 +135,10 @@ fn normalize_priority(value: Option<String>) -> Result<String, StatusCode> {
 }
 
 fn normalize_status(value: Option<String>) -> Result<String, StatusCode> {
-    let value = value.unwrap_or_else(|| "DRAFT".into()).trim().to_uppercase();
+    let value = value
+        .unwrap_or_else(|| "DRAFT".into())
+        .trim()
+        .to_uppercase();
     if matches!(
         value.as_str(),
         "DRAFT" | "APPROVED" | "IN_PROGRESS" | "DONE" | "REJECTED"
@@ -229,7 +235,11 @@ async fn update_requirement(
     let (_, role) = requirement_access(&state, requirement_id, user_id).await?;
     ensure_writable(&role)?;
 
-    if payload.title.as_deref().is_some_and(|value| value.trim().is_empty()) {
+    if payload
+        .title
+        .as_deref()
+        .is_some_and(|value| value.trim().is_empty())
+    {
         return Err(StatusCode::UNPROCESSABLE_ENTITY);
     }
     let requirement_type = match payload.requirement_type {
