@@ -1,6 +1,7 @@
 mod auth;
 mod decisions;
 mod deliverables;
+mod overview;
 mod phases;
 mod projects;
 mod requirements;
@@ -13,7 +14,7 @@ use serde::Serialize;
 use sqlx::postgres::PgPoolOptions;
 use state::AppState;
 use std::net::SocketAddr;
-use tower_http::trace::TraceLayer;
+use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 #[derive(Serialize)]
 struct HealthResponse {
@@ -39,7 +40,9 @@ fn app(state: AppState) -> Router {
         .nest("/api/v1", requirements::routes::router())
         .nest("/api/v1", tasks::routes::router())
         .nest("/api/v1", decisions::routes::router())
+        .nest("/api/v1", overview::routes::router())
         .with_state(state)
+        .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
 }
 
