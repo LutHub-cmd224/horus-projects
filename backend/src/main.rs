@@ -1,4 +1,5 @@
 mod auth;
+mod decisions;
 mod deliverables;
 mod phases;
 mod projects;
@@ -37,6 +38,7 @@ fn app(state: AppState) -> Router {
         .nest("/api/v1", deliverables::routes::router())
         .nest("/api/v1", requirements::routes::router())
         .nest("/api/v1", tasks::routes::router())
+        .nest("/api/v1", decisions::routes::router())
         .with_state(state)
         .layer(TraceLayer::new_for_http())
 }
