@@ -4,6 +4,7 @@ mod phases;
 mod projects;
 mod requirements;
 mod state;
+mod tasks;
 mod workspaces;
 
 use axum::{Json, Router, routing::get};
@@ -35,6 +36,7 @@ fn app(state: AppState) -> Router {
         .nest("/api/v1", phases::routes::router())
         .nest("/api/v1", deliverables::routes::router())
         .nest("/api/v1", requirements::routes::router())
+        .nest("/api/v1", tasks::routes::router())
         .with_state(state)
         .layer(TraceLayer::new_for_http())
 }
