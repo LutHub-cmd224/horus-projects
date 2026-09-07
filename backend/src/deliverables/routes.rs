@@ -2,7 +2,7 @@ use axum::{
     Json, Router,
     extract::{Path, State},
     http::{HeaderMap, StatusCode, header},
-    routing::{get, patch},
+    routing::get,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
