@@ -1,17 +1,96 @@
-export const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8080/api/v1';
+export const API_BASE =
+  import.meta.env.VITE_API_URL ?? "http://localhost:8080/api/v1";
 
-export type AuthTokens = { access_token: string; refresh_token: string; token_type: string };
+export type AuthTokens = {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+};
 export type User = { id: string; email: string; display_name: string | null };
-export type Workspace = { id: string; name: string; slug: string; role: string };
-export type Project = { id: string; workspace_id: string; name: string; slug: string; description: string | null; status: string };
-export type OverviewPhase = { id: string; phase_type: string; position: number; status: string; required_criteria: number; completed_required_criteria: number };
-export type ValidationCriterion = { id: string; phase_id: string; code: string; label: string; required: boolean; completed: boolean };
-export type ProjectOverview = { project: { id: string; name: string; description: string | null; status: string }; phases: OverviewPhase[]; requirement_count: number; open_task_count: number; decision_count: number; latest_decision: { code: string; title: string; status: string } | null };
+export type Workspace = {
+  id: string;
+  name: string;
+  slug: string;
+  role: string;
+};
+export type Project = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  status: string;
+};
+export type OverviewPhase = {
+  id: string;
+  phase_type: string;
+  position: number;
+  status: string;
+  required_criteria: number;
+  completed_required_criteria: number;
+};
+export type ValidationCriterion = {
+  id: string;
+  phase_id: string;
+  code: string;
+  label: string;
+  required: boolean;
+  completed: boolean;
+};
+export type ModelAttribute = {
+  conceptual_name: string;
+  logical_name: string | null;
+  physical_name: string | null;
+  data_type: string | null;
+  is_primary_key: boolean;
+  is_unique: boolean;
+  is_nullable: boolean;
+  default_value: string | null;
+};
+export type ModelEntity = {
+  conceptual_name: string;
+  logical_name: string | null;
+  physical_name: string | null;
+  description: string | null;
+  attributes: ModelAttribute[];
+};
+export type ModelRelationship = {
+  name: string;
+  source_entity: string;
+  target_entity: string;
+  source_cardinality: string;
+  target_cardinality: string;
+  description: string | null;
+};
+export type BusinessRule = { title: string; description: string };
+export type ModelWorkspaceData = {
+  entities: ModelEntity[];
+  relationships: ModelRelationship[];
+  business_rules: BusinessRule[];
+  artifacts: string[];
+};
+export type ProjectOverview = {
+  project: {
+    id: string;
+    name: string;
+    description: string | null;
+    status: string;
+  };
+  phases: OverviewPhase[];
+  requirement_count: number;
+  open_task_count: number;
+  decision_count: number;
+  latest_decision: { code: string; title: string; status: string } | null;
+};
 
-async function request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+  token?: string,
+): Promise<T> {
   const headers = new Headers(options.headers);
-  headers.set('Content-Type', 'application/json');
-  if (token) headers.set('Authorization', `Bearer ${token}`);
+  headers.set("Content-Type", "application/json");
+  if (token) headers.set("Authorization", `Bearer ${token}`);
   const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
   if (!response.ok) throw new Error(`HORUS API ${response.status}`);
   if (response.status === 204) return undefined as T;
@@ -19,15 +98,76 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
 }
 
 export const api = {
-  login: (email: string, password: string) => request<AuthTokens>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
-  register: (email: string, password: string, displayName: string) => request<AuthTokens>('/auth/register', { method: 'POST', body: JSON.stringify({ email, password, display_name: displayName || null }) }),
-  me: (token: string) => request<User>('/auth/me', {}, token),
-  projects: (token: string) => request<Project[]>('/projects', {}, token),
-  workspaces: (token: string) => request<Workspace[]>('/workspaces', {}, token),
-  overview: (projectId: string, token: string) => request<ProjectOverview>(`/projects/${projectId}/overview`, {}, token),
-  createProject: (workspaceId: string, name: string, description: string, token: string) => request<Project>('/projects', { method: 'POST', body: JSON.stringify({ workspace_id: workspaceId, name, description: description || null }) }, token),
-  criteria: (phaseId: string, token: string) => request<ValidationCriterion[]>(`/phases/${phaseId}/criteria`, {}, token),
-  startPhase: (phaseId: string, token: string) => request<void>(`/phases/${phaseId}/start`, { method: 'POST' }, token),
-  updateCriterion: (phaseId: string, criterionId: string, completed: boolean, token: string) => request<void>(`/phases/${phaseId}/criteria/${criterionId}`, { method: 'PATCH', body: JSON.stringify({ completed }) }, token),
-  validatePhase: (phaseId: string, token: string, comment?: string) => request<void>(`/phases/${phaseId}/validate`, { method: 'POST', body: JSON.stringify({ comment: comment || null }) }, token),
+  login: (email: string, password: string) =>
+    request<AuthTokens>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+  register: (email: string, password: string, displayName: string) =>
+    request<AuthTokens>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({
+        email,
+        password,
+        display_name: displayName || null,
+      }),
+    }),
+  me: (token: string) => request<User>("/auth/me", {}, token),
+  projects: (token: string) => request<Project[]>("/projects", {}, token),
+  workspaces: (token: string) => request<Workspace[]>("/workspaces", {}, token),
+  overview: (projectId: string, token: string) =>
+    request<ProjectOverview>(`/projects/${projectId}/overview`, {}, token),
+  createProject: (
+    workspaceId: string,
+    name: string,
+    description: string,
+    token: string,
+  ) =>
+    request<Project>(
+      "/projects",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          workspace_id: workspaceId,
+          name,
+          description: description || null,
+        }),
+      },
+      token,
+    ),
+  criteria: (phaseId: string, token: string) =>
+    request<ValidationCriterion[]>(`/phases/${phaseId}/criteria`, {}, token),
+  startPhase: (phaseId: string, token: string) =>
+    request<void>(`/phases/${phaseId}/start`, { method: "POST" }, token),
+  updateCriterion: (
+    phaseId: string,
+    criterionId: string,
+    completed: boolean,
+    token: string,
+  ) =>
+    request<void>(
+      `/phases/${phaseId}/criteria/${criterionId}`,
+      { method: "PATCH", body: JSON.stringify({ completed }) },
+      token,
+    ),
+  validatePhase: (phaseId: string, token: string, comment?: string) =>
+    request<void>(
+      `/phases/${phaseId}/validate`,
+      { method: "POST", body: JSON.stringify({ comment: comment || null }) },
+      token,
+    ),
+  model: (phaseId: string, token: string) =>
+    request<ModelWorkspaceData>(`/phases/${phaseId}/model`, {}, token),
+  saveModel: (phaseId: string, model: ModelWorkspaceData, token: string) =>
+    request<ModelWorkspaceData>(
+      `/phases/${phaseId}/model`,
+      { method: "PUT", body: JSON.stringify(model) },
+      token,
+    ),
+  generateModelArtifact: (phaseId: string, level: string, token: string) =>
+    request<unknown>(
+      `/phases/${phaseId}/model/artifacts/${level}`,
+      { method: "POST" },
+      token,
+    ),
 };

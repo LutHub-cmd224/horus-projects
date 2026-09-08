@@ -1,6 +1,7 @@
 mod auth;
 mod decisions;
 mod deliverables;
+mod models;
 mod overview;
 mod phases;
 mod projects;
@@ -63,6 +64,7 @@ fn app(state: AppState) -> Router {
         .nest("/api/v1/projects", projects::routes::router())
         .nest("/api/v1", phases::routes::router())
         .nest("/api/v1", deliverables::routes::router())
+        .nest("/api/v1", models::routes::router())
         .nest("/api/v1", requirements::routes::router())
         .nest("/api/v1", tasks::routes::router())
         .nest("/api/v1", decisions::routes::router())
