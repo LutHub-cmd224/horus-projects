@@ -198,7 +198,7 @@ async fn workspace(
     let total = tasks.len() as i64;
     let done = tasks.iter().filter(|task| task.status == "DONE").count() as i64;
     let blocked = tasks.iter().filter(|task| task.status == "BLOCKED").count() as i64;
-    let artifacts=sqlx::query_scalar::<_,String>("SELECT replace(type,'BUILD_','') FROM deliverables WHERE phase_id=$1 AND type LIKE 'BUILD_%' AND deleted_at IS NULL ORDER BY type").bind(phase_id).fetch_all(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    let artifacts=sqlx::query_scalar::<_,String>("SELECT substring(type FROM 7) FROM deliverables WHERE phase_id=$1 AND type LIKE 'BUILD_%' AND deleted_at IS NULL ORDER BY type").bind(phase_id).fetch_all(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(BuildWorkspace {
         design_pack_ready,
         requirements,
