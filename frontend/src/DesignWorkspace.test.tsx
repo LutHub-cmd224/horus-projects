@@ -47,6 +47,7 @@ describe("DesignWorkspace", () => {
   it("validates a generated design pack", async () => {
     vi.spyOn(api, "design").mockResolvedValue({
       ...data,
+      decisions: [{ status: "ACCEPTED" }],
       artifacts: ["DESIGN_PACK"],
     });
     const validate = vi
@@ -69,5 +70,36 @@ describe("DesignWorkspace", () => {
         "Validation du Design Pack",
       ),
     );
+  });
+  it("requires an accepted decision before generating ADR artifacts", async () => {
+    vi.spyOn(api, "design").mockResolvedValue({
+      ...data,
+      decisions: [{ title: "ADR-001", status: "PROPOSED" }],
+    });
+    const { rerender } = render(
+      <DesignWorkspace onChanged={vi.fn()} phase={phase} token="token" />,
+    );
+    expect(
+      await screen.findByRole("button", { name: "ADR_INDEX" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "DESIGN_PACK" }),
+    ).toBeDisabled();
+
+    vi.mocked(api.design).mockResolvedValue({
+      ...data,
+      decisions: [{ title: "ADR-001", status: "ACCEPTED" }],
+    });
+    rerender(
+      <DesignWorkspace onChanged={vi.fn()} phase={{ ...phase }} token="next" />,
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "ADR_INDEX" }),
+      ).not.toBeDisabled(),
+    );
+    expect(
+      screen.getByRole("button", { name: "DESIGN_PACK" }),
+    ).not.toBeDisabled();
   });
 });

@@ -187,7 +187,7 @@ async fn register_create_project_and_load_overview() {
         "features": [{"title":"Design workspace","description":"Capture design decisions"}],
         "api_contracts": [{"title":"Design API","description":"Load, save and generate artifacts"}],
         "security_controls": [{"title":"Authorization","description":"Enforce workspace roles"}],
-        "decisions": [{"title":"ADR-001","description":"Keep the existing modular monolith"}],
+        "decisions": [{"title":"ADR-001","description":"Keep the existing modular monolith","status":"PROPOSED"}],
         "artifacts": []
     });
     let (status, saved_design) = json_request(
@@ -200,6 +200,45 @@ async fn register_create_project_and_load_overview() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(saved_design["components"].as_array().unwrap().len(), 3);
+
+    let technology_decisions_accepted = sqlx::query_scalar::<_, bool>(
+        "SELECT completed FROM validation_criteria WHERE phase_id = $1 AND code = 'technology_decisions_accepted'",
+    )
+    .bind(design_phase_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert!(!technology_decisions_accepted);
+
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{design_phase_id}/design/artifacts/DESIGN_PACK"),
+        Some(access_token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+
+    let mut accepted_design = saved_design;
+    accepted_design["decisions"][0]["status"] = json!("ACCEPTED");
+    let (status, _) = json_request(
+        &app,
+        "PUT",
+        &format!("/api/v1/phases/{design_phase_id}/design"),
+        Some(access_token),
+        Some(accepted_design),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let technology_decisions_accepted = sqlx::query_scalar::<_, bool>(
+        "SELECT completed FROM validation_criteria WHERE phase_id = $1 AND code = 'technology_decisions_accepted'",
+    )
+    .bind(design_phase_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert!(technology_decisions_accepted);
 
     let (status, _) = json_request(
         &app,

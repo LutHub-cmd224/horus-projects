@@ -17,6 +17,14 @@ const sections = [
   ["security_controls", "Sécurité"],
   ["decisions", "Décisions d’architecture"],
 ] as const;
+const hasAcceptedDecision = (decisions: unknown[]) =>
+  decisions.some(
+    (decision) =>
+      typeof decision === "object" &&
+      decision !== null &&
+      "status" in decision &&
+      decision.status === "ACCEPTED",
+  );
 export function DesignWorkspace({
   phase,
   token,
@@ -77,6 +85,18 @@ export function DesignWorkspace({
     } finally {
       setBusy("");
     }
+  }
+  function setDecisionStatus(index: number, status: string) {
+    setD((value) => ({
+      ...value,
+      decisions: value.decisions.map((decision, decisionIndex) =>
+        decisionIndex === index &&
+        typeof decision === "object" &&
+        decision !== null
+          ? { ...decision, status }
+          : decision,
+      ),
+    }));
   }
   return (
     <section
@@ -169,6 +189,7 @@ export function DesignWorkspace({
                       {
                         title: `${label} ${v[key].length + 1}`,
                         description: "À préciser",
+                        ...(key === "decisions" ? { status: "PROPOSED" } : {}),
                       },
                     ],
                   }))
@@ -180,6 +201,31 @@ export function DesignWorkspace({
             <pre className="mt-3 max-h-32 overflow-auto whitespace-pre-wrap text-xs text-black/50">
               {JSON.stringify(d[key], null, 2)}
             </pre>
+            {key === "decisions" &&
+              d.decisions.map((decision, index) => (
+                <select
+                  aria-label={`Statut décision ${index + 1}`}
+                  className="mt-2 w-full rounded-lg border p-2 text-sm"
+                  disabled={locked}
+                  key={index}
+                  onChange={(event) =>
+                    setDecisionStatus(index, event.target.value)
+                  }
+                  value={
+                    typeof decision === "object" &&
+                    decision !== null &&
+                    "status" in decision &&
+                    typeof decision.status === "string"
+                      ? decision.status
+                      : "PROPOSED"
+                  }
+                >
+                  <option value="PROPOSED">Proposée</option>
+                  <option value="ACCEPTED">Acceptée</option>
+                  <option value="REJECTED">Rejetée</option>
+                  <option value="SUPERSEDED">Remplacée</option>
+                </select>
+              ))}
           </article>
         ))}
       </div>
@@ -200,7 +246,12 @@ export function DesignWorkspace({
         ].map((k) => (
           <button
             className={`rounded-full border px-4 py-2 text-xs font-semibold ${d.artifacts.includes(k) ? "bg-black text-white" : ""}`}
-            disabled={locked || !!busy}
+            disabled={
+              locked ||
+              !!busy ||
+              ((k === "ADR_INDEX" || k === "DESIGN_PACK") &&
+                !hasAcceptedDecision(d.decisions))
+            }
             onClick={() => void artifact(k)}
             key={k}
           >

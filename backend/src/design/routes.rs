@@ -61,6 +61,14 @@ async fn access(s: &AppState, p: Uuid, u: Uuid) -> Result<(String, String), Stat
 fn array(v: &Value) -> bool {
     v.as_array().is_some_and(|a| !a.is_empty())
 }
+
+fn has_accepted_decision(v: &Value) -> bool {
+    v.as_array().is_some_and(|decisions| {
+        decisions
+            .iter()
+            .any(|decision| decision.get("status").and_then(Value::as_str) == Some("ACCEPTED"))
+    })
+}
 async fn workspace(s: &AppState, p: Uuid) -> Result<DesignWorkspace, StatusCode> {
     let components=sqlx::query_as::<_,(String,String,String,String)>("SELECT name,category,responsibility,technology FROM design_components WHERE phase_id=$1 ORDER BY position").bind(p).fetch_all(&s.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?.into_iter().map(|x|Component{name:x.0,category:x.1,responsibility:x.2,technology:x.3}).collect();
     let connections=sqlx::query_as::<_,(String,String,String,String)>("SELECT source_name,target_name,protocol,description FROM design_connections WHERE phase_id=$1 ORDER BY created_at").bind(p).fetch_all(&s.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?.into_iter().map(|x|Connection{source_name:x.0,target_name:x.1,protocol:x.2,description:x.3}).collect();
@@ -168,7 +176,10 @@ async fn save(
         ("features_specified", array(&w.features)),
         ("api_contracts_defined", array(&w.api_contracts)),
         ("security_reviewed", array(&w.security_controls)),
-        ("technology_decisions_accepted", array(&w.decisions)),
+        (
+            "technology_decisions_accepted",
+            has_accepted_decision(&w.decisions),
+        ),
     ] {
         sqlx::query("UPDATE validation_criteria SET completed=$2,completed_by=CASE WHEN $2 THEN $3 ELSE NULL END,completed_at=CASE WHEN $2 THEN now() ELSE NULL END WHERE phase_id=$1 AND code=$4").bind(p).bind(done).bind(u).bind(code).execute(&mut*tx).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     }
@@ -210,14 +221,14 @@ async fn artifact(
         "FEATURES" => array(&w.features),
         "API_CONTRACTS" => array(&w.api_contracts),
         "SECURITY" => array(&w.security_controls),
-        "ADR_INDEX" => array(&w.decisions),
+        "ADR_INDEX" => has_accepted_decision(&w.decisions),
         _ => {
             !w.components.is_empty()
                 && array(&w.ux_flows)
                 && array(&w.features)
                 && array(&w.api_contracts)
                 && array(&w.security_controls)
-                && array(&w.decisions)
+                && has_accepted_decision(&w.decisions)
         }
     };
     if !ready {
