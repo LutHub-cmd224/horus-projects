@@ -108,6 +108,8 @@ async fn register_create_project_and_load_overview() {
     assert_eq!(overview["phases"][0]["phase_type"], "ANALYZE");
     assert_eq!(overview["phases"][0]["status"], "AVAILABLE");
     assert_eq!(overview["phases"][0]["required_criteria"], 6);
+    assert_eq!(overview["phases"][1]["phase_type"], "MODEL");
+    assert_eq!(overview["phases"][1]["required_criteria"], 6);
     assert_eq!(overview["requirement_count"], 0);
     assert_eq!(overview["open_task_count"], 0);
     assert_eq!(overview["decision_count"], 0);
