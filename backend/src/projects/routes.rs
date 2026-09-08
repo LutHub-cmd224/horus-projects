@@ -165,6 +165,7 @@ async fn create_project(
 
     let mut analyze_phase_id = None;
     let mut model_phase_id = None;
+    let mut design_phase_id = None;
     for (phase_type, position, status) in phases {
         let phase_id = sqlx::query_scalar::<_, Uuid>(
             "INSERT INTO phases (project_id, phase_type, position, status) VALUES ($1, $2::phase_type, $3, $4::phase_status) RETURNING id",
@@ -180,6 +181,8 @@ async fn create_project(
             analyze_phase_id = Some(phase_id);
         } else if position == 2 {
             model_phase_id = Some(phase_id);
+        } else if position == 3 {
+            design_phase_id = Some(phase_id);
         }
     }
 
@@ -220,6 +223,21 @@ async fn create_project(
             .execute(&mut *tx)
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+    let design_phase_id = design_phase_id.ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    for (code, label) in [
+        ("architecture_defined", "Technical architecture defined"),
+        ("ux_flows_defined", "UX flows defined"),
+        ("features_specified", "Features specified"),
+        ("api_contracts_defined", "API contracts defined"),
+        ("security_reviewed", "Security reviewed"),
+        (
+            "technology_decisions_accepted",
+            "Technology decisions accepted",
+        ),
+        ("design_pack_ready", "Design pack ready"),
+    ] {
+        sqlx::query("INSERT INTO validation_criteria(phase_id,code,label,required,completed) VALUES($1,$2,$3,true,false)").bind(design_phase_id).bind(code).bind(label).execute(&mut *tx).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     }
 
     tx.commit()

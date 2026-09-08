@@ -110,6 +110,8 @@ async fn register_create_project_and_load_overview() {
     assert_eq!(overview["phases"][0]["required_criteria"], 6);
     assert_eq!(overview["phases"][1]["phase_type"], "MODEL");
     assert_eq!(overview["phases"][1]["required_criteria"], 6);
+    assert_eq!(overview["phases"][2]["phase_type"], "DESIGN");
+    assert_eq!(overview["phases"][2]["required_criteria"], 7);
     assert_eq!(overview["requirement_count"], 0);
     assert_eq!(overview["open_task_count"], 0);
     assert_eq!(overview["decision_count"], 0);
@@ -164,4 +166,103 @@ async fn register_create_project_and_load_overview() {
         deliverable_count, 0,
         "artifact insert must roll back with its criterion update"
     );
+
+    let design_phase_id = Uuid::parse_str(overview["phases"][2]["id"].as_str().unwrap()).unwrap();
+    sqlx::query("UPDATE phases SET status = 'AVAILABLE' WHERE id = $1")
+        .bind(design_phase_id)
+        .execute(&db)
+        .await
+        .unwrap();
+    let design = json!({
+        "components": [
+            {"name":"Web","category":"FRONTEND","responsibility":"User experience","technology":"React"},
+            {"name":"API","category":"BACKEND","responsibility":"Business rules","technology":"Rust/Axum"},
+            {"name":"Database","category":"DATABASE","responsibility":"Persistence","technology":"PostgreSQL"}
+        ],
+        "connections": [
+            {"source_name":"Web","target_name":"API","protocol":"HTTPS/JSON","description":"Authenticated API"},
+            {"source_name":"API","target_name":"Database","protocol":"SQL","description":"SQLx queries"}
+        ],
+        "ux_flows": [{"title":"Create project","description":"Guide the owner through setup"}],
+        "features": [{"title":"Design workspace","description":"Capture design decisions"}],
+        "api_contracts": [{"title":"Design API","description":"Load, save and generate artifacts"}],
+        "security_controls": [{"title":"Authorization","description":"Enforce workspace roles"}],
+        "decisions": [{"title":"ADR-001","description":"Keep the existing modular monolith","status":"PROPOSED"}],
+        "artifacts": []
+    });
+    let (status, saved_design) = json_request(
+        &app,
+        "PUT",
+        &format!("/api/v1/phases/{design_phase_id}/design"),
+        Some(access_token),
+        Some(design),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(saved_design["components"].as_array().unwrap().len(), 3);
+
+    let technology_decisions_accepted = sqlx::query_scalar::<_, bool>(
+        "SELECT completed FROM validation_criteria WHERE phase_id = $1 AND code = 'technology_decisions_accepted'",
+    )
+    .bind(design_phase_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert!(!technology_decisions_accepted);
+
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{design_phase_id}/design/artifacts/DESIGN_PACK"),
+        Some(access_token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+
+    let mut accepted_design = saved_design;
+    accepted_design["decisions"][0]["status"] = json!("ACCEPTED");
+    let (status, _) = json_request(
+        &app,
+        "PUT",
+        &format!("/api/v1/phases/{design_phase_id}/design"),
+        Some(access_token),
+        Some(accepted_design),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let technology_decisions_accepted = sqlx::query_scalar::<_, bool>(
+        "SELECT completed FROM validation_criteria WHERE phase_id = $1 AND code = 'technology_decisions_accepted'",
+    )
+    .bind(design_phase_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert!(technology_decisions_accepted);
+
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{design_phase_id}/design/artifacts/DESIGN_PACK"),
+        Some(access_token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let design_pack_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM deliverables WHERE phase_id = $1 AND type = 'DESIGN_DESIGN_PACK' AND status = 'READY'",
+    )
+    .bind(design_phase_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(design_pack_count, 1);
+    let design_pack_ready = sqlx::query_scalar::<_, bool>(
+        "SELECT completed FROM validation_criteria WHERE phase_id = $1 AND code = 'design_pack_ready'",
+    )
+    .bind(design_phase_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert!(design_pack_ready);
 }

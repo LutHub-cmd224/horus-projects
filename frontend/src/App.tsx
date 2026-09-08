@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { AnalyzeWorkspace } from "./AnalyzeWorkspace";
 import { ModelWorkspace } from "./ModelWorkspace";
+import { DesignWorkspace } from "./DesignWorkspace";
 import {
   api,
   type Project,
@@ -332,9 +333,8 @@ function Dashboard({
   const analyze = overview.phases.find(
     (phase) => phase.phase_type === "ANALYZE",
   );
-  const model = overview.phases.find(
-    (phase) => phase.phase_type === "MODEL",
-  );
+  const model = overview.phases.find((phase) => phase.phase_type === "MODEL");
+  const design = overview.phases.find((phase) => phase.phase_type === "DESIGN");
   const metrics = [
     [overview.requirement_count, "Exigences"],
     [overview.open_task_count, "Tâches ouvertes"],
@@ -529,6 +529,13 @@ function Dashboard({
               <ModelWorkspace
                 onChanged={onRefresh}
                 phase={model}
+                token={token}
+              />
+            )}
+            {design && design.status !== "LOCKED" && token && onRefresh && (
+              <DesignWorkspace
+                onChanged={onRefresh}
+                phase={design}
                 token={token}
               />
             )}

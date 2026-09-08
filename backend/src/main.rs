@@ -1,6 +1,7 @@
 mod auth;
 mod decisions;
 mod deliverables;
+mod design;
 mod models;
 mod overview;
 mod phases;
@@ -49,6 +50,7 @@ fn cors_layer() -> CorsLayer {
         .allow_methods([
             Method::GET,
             Method::POST,
+            Method::PUT,
             Method::PATCH,
             Method::DELETE,
             Method::OPTIONS,
@@ -64,6 +66,7 @@ fn app(state: AppState) -> Router {
         .nest("/api/v1/projects", projects::routes::router())
         .nest("/api/v1", phases::routes::router())
         .nest("/api/v1", deliverables::routes::router())
+        .nest("/api/v1", design::routes::router())
         .nest("/api/v1", models::routes::router())
         .nest("/api/v1", requirements::routes::router())
         .nest("/api/v1", tasks::routes::router())

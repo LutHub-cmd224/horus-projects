@@ -69,6 +69,27 @@ export type ModelWorkspaceData = {
   business_rules: BusinessRule[];
   artifacts: string[];
 };
+export type DesignComponent = {
+  name: string;
+  category: "FRONTEND" | "BACKEND" | "DATABASE" | "EXTERNAL";
+  responsibility: string;
+  technology: string;
+};
+export type DesignWorkspaceData = {
+  components: DesignComponent[];
+  connections: {
+    source_name: string;
+    target_name: string;
+    protocol: string;
+    description: string;
+  }[];
+  ux_flows: unknown[];
+  features: unknown[];
+  api_contracts: unknown[];
+  security_controls: unknown[];
+  decisions: unknown[];
+  artifacts: string[];
+};
 export type ProjectOverview = {
   project: {
     id: string;
@@ -167,6 +188,20 @@ export const api = {
   generateModelArtifact: (phaseId: string, level: string, token: string) =>
     request<unknown>(
       `/phases/${phaseId}/model/artifacts/${level}`,
+      { method: "POST" },
+      token,
+    ),
+  design: (phaseId: string, token: string) =>
+    request<DesignWorkspaceData>(`/phases/${phaseId}/design`, {}, token),
+  saveDesign: (phaseId: string, value: DesignWorkspaceData, token: string) =>
+    request<DesignWorkspaceData>(
+      `/phases/${phaseId}/design`,
+      { method: "PUT", body: JSON.stringify(value) },
+      token,
+    ),
+  generateDesignArtifact: (phaseId: string, kind: string, token: string) =>
+    request<unknown>(
+      `/phases/${phaseId}/design/artifacts/${kind}`,
       { method: "POST" },
       token,
     ),
