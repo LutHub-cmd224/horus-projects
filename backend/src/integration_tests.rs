@@ -112,6 +112,8 @@ async fn register_create_project_and_load_overview() {
     assert_eq!(overview["phases"][1]["required_criteria"], 6);
     assert_eq!(overview["phases"][2]["phase_type"], "DESIGN");
     assert_eq!(overview["phases"][2]["required_criteria"], 7);
+    assert_eq!(overview["phases"][3]["phase_type"], "BUILD");
+    assert_eq!(overview["phases"][3]["required_criteria"], 6);
     assert_eq!(overview["requirement_count"], 0);
     assert_eq!(overview["open_task_count"], 0);
     assert_eq!(overview["decision_count"], 0);
@@ -265,4 +267,124 @@ async fn register_create_project_and_load_overview() {
     .await
     .unwrap();
     assert!(design_pack_ready);
+
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{design_phase_id}/validate"),
+        Some(access_token),
+        Some(json!({"comment":"Design ready for Build"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let build_phase_id = Uuid::parse_str(overview["phases"][3]["id"].as_str().unwrap()).unwrap();
+    let (status, requirement) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/projects/{project_id}/requirements"),
+        Some(access_token),
+        Some(json!({
+            "code":"REQ-BUILD-001",
+            "title":"Provide a traceable Build workspace",
+            "requirement_type":"FUNCTIONAL",
+            "priority":"HIGH",
+            "status":"APPROVED"
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let requirement_id = requirement["id"].as_str().unwrap();
+
+    let (status, build) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{build_phase_id}/build/tasks"),
+        Some(access_token),
+        Some(json!({
+            "requirement_id":requirement_id,
+            "title":"Implement Build workspace",
+            "priority":"HIGH"
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(build["tasks"].as_array().unwrap().len(), 1);
+    let task_id = build["tasks"][0]["id"].as_str().unwrap();
+
+    let (status, _) = json_request(
+        &app,
+        "PUT",
+        &format!("/api/v1/phases/{build_phase_id}/build/github"),
+        Some(access_token),
+        Some(json!({
+            "repository_url":"https://github.com/example/horus",
+            "default_branch":"main",
+            "integration_strategy":"PULL_REQUEST",
+            "ci_required":true,
+            "definition_of_done":["Tests pass","Review approved"]
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{build_phase_id}/build/decisions"),
+        Some(access_token),
+        Some(json!({
+            "title":"Feature branch workflow",
+            "decision":"Every change is reviewed in a pull request",
+            "status":"ACCEPTED"
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{build_phase_id}/build/artifacts/BUILD_PLAN"),
+        Some(access_token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, build) = json_request(
+        &app,
+        "PATCH",
+        &format!("/api/v1/phases/{build_phase_id}/build/tasks/{task_id}"),
+        Some(access_token),
+        Some(json!({"status":"DONE"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(build["progress"]["percent"], 100);
+    assert!(
+        build["artifacts"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("BUILD_PLAN"))
+    );
+
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{build_phase_id}/validate"),
+        Some(access_token),
+        Some(json!({"comment":"Build Plan ready for Test"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, _) = json_request(
+        &app,
+        "PATCH",
+        &format!("/api/v1/phases/{build_phase_id}/build/tasks/{task_id}"),
+        Some(access_token),
+        Some(json!({"status":"TODO"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
 }
