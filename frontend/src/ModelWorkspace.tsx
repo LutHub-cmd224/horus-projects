@@ -138,6 +138,18 @@ export function ModelWorkspace({
       setBusy("");
     }
   }
+  async function validate() {
+    setBusy("validate");
+    setError("");
+    try {
+      await api.validatePhase(phase.id, token, "Validation MCD → MLD → MPD");
+      await onChanged();
+    } catch {
+      setError("La phase Modéliser n’est pas encore complète.");
+    } finally {
+      setBusy("");
+    }
+  }
   if (loading)
     return (
       <div className="mt-14 rounded-[2rem] border border-black/10 p-10 text-sm text-black/45">
@@ -363,6 +375,19 @@ export function ModelWorkspace({
             {model.artifacts.includes(level) ? "✓ " : ""}Générer {level}
           </button>
         ))}
+        <button
+          className="ml-auto rounded-full bg-[#d9503f] px-6 py-2 text-sm font-bold text-white disabled:opacity-35"
+          disabled={
+            locked ||
+            !!busy ||
+            !["MCD", "MLD", "MPD"].every((level) =>
+              model.artifacts.includes(level),
+            )
+          }
+          onClick={() => void validate()}
+        >
+          {locked ? "Phase validée" : "Valider Modéliser →"}
+        </button>
       </div>
     </section>
   );
