@@ -293,10 +293,24 @@ async fn generate_artifact(
     let content = json!({"level":level,"model":model});
     let kind = format!("MODEL_{level}");
     let title = format!("{level} — Model workspace");
-    let updated=sqlx::query("UPDATE deliverables SET content=$3,status='READY',version=version+1,updated_at=now() WHERE phase_id=$1 AND type=$2 AND deleted_at IS NULL").bind(phase_id).bind(&kind).bind(&content).execute(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let updated=sqlx::query("UPDATE deliverables SET content=$3,status='READY',version=version+1,updated_at=now() WHERE phase_id=$1 AND type=$2 AND deleted_at IS NULL").bind(phase_id).bind(&kind).bind(&content).execute(&mut *tx).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     if updated.rows_affected() == 0 {
-        sqlx::query("INSERT INTO deliverables(phase_id,title,type,content,status,created_by) VALUES($1,$2,$3,$4,'READY',$5)").bind(phase_id).bind(title).bind(&kind).bind(&content).bind(u).execute(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+        sqlx::query("INSERT INTO deliverables(phase_id,title,type,content,status,created_by) VALUES($1,$2,$3,$4,'READY',$5)").bind(phase_id).bind(title).bind(&kind).bind(&content).bind(u).execute(&mut *tx).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     }
-    sqlx::query("UPDATE validation_criteria SET completed=true,completed_by=$2,completed_at=now() WHERE phase_id=$1 AND code=$3").bind(phase_id).bind(u).bind(format!("{}_defined",level.to_lowercase())).execute(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    let criterion = sqlx::query("UPDATE validation_criteria SET completed=true,completed_by=$2,completed_at=now() WHERE phase_id=$1 AND code=$3").bind(phase_id).bind(u).bind(format!("{}_defined",level.to_lowercase())).execute(&mut *tx).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    if criterion.rows_affected() != 1 {
+        tx.rollback()
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+    tx.commit()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(content))
 }

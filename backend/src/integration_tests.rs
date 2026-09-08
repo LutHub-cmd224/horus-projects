@@ -54,7 +54,7 @@ async fn register_create_project_and_load_overview() {
     sqlx::migrate!().run(&db).await.unwrap();
 
     let app = app(AppState {
-        db,
+        db: db.clone(),
         jwt_secret: b"ci-integration-secret-at-least-32-bytes".to_vec(),
     });
 
@@ -113,4 +113,55 @@ async fn register_create_project_and_load_overview() {
     assert_eq!(overview["requirement_count"], 0);
     assert_eq!(overview["open_task_count"], 0);
     assert_eq!(overview["decision_count"], 0);
+
+    let model_phase_id = Uuid::parse_str(overview["phases"][1]["id"].as_str().unwrap()).unwrap();
+    sqlx::query("UPDATE phases SET status = 'AVAILABLE' WHERE id = $1")
+        .bind(model_phase_id)
+        .execute(&db)
+        .await
+        .unwrap();
+    let model = json!({
+        "entities": [
+            {"conceptual_name":"User","logical_name":"User","physical_name":"users","description":null,"attributes":[]},
+            {"conceptual_name":"Project","logical_name":"Project","physical_name":"projects","description":null,"attributes":[]}
+        ],
+        "relationships": [{"name":"owns","source_entity":"User","target_entity":"Project","source_cardinality":"1","target_cardinality":"0..N","description":null}],
+        "business_rules": [],
+        "artifacts": []
+    });
+    let (status, _) = json_request(
+        &app,
+        "PUT",
+        &format!("/api/v1/phases/{model_phase_id}/model"),
+        Some(access_token),
+        Some(model),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    sqlx::query("DELETE FROM validation_criteria WHERE phase_id = $1 AND code = 'mcd_defined'")
+        .bind(model_phase_id)
+        .execute(&db)
+        .await
+        .unwrap();
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{model_phase_id}/model/artifacts/MCD"),
+        Some(access_token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    let deliverable_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM deliverables WHERE phase_id = $1 AND type = 'MODEL_MCD'",
+    )
+    .bind(model_phase_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(
+        deliverable_count, 0,
+        "artifact insert must roll back with its criterion update"
+    );
 }
