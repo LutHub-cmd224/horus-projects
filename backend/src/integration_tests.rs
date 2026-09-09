@@ -116,6 +116,8 @@ async fn register_create_project_and_load_overview() {
     assert_eq!(overview["phases"][3]["required_criteria"], 6);
     assert_eq!(overview["phases"][4]["phase_type"], "TEST");
     assert_eq!(overview["phases"][4]["required_criteria"], 7);
+    assert_eq!(overview["phases"][5]["phase_type"], "DEPLOY");
+    assert_eq!(overview["phases"][5]["required_criteria"], 9);
     assert_eq!(overview["requirement_count"], 0);
     assert_eq!(overview["open_task_count"], 0);
     assert_eq!(overview["decision_count"], 0);
@@ -628,4 +630,107 @@ async fn register_create_project_and_load_overview() {
     )
     .await;
     assert_eq!(status, StatusCode::CONFLICT);
+
+    let deploy = json!({
+        "target_environment":"Production",
+        "production_url":"https://horus.example.com",
+        "provider":"Railway",
+        "deployment_status":"DEPLOYED",
+        "configuration_notes":"Production domain and runtime configured",
+        "configuration_keys":["DATABASE_URL","JWT_SECRET"],
+        "migrations_required":false,
+        "migrations_plan":"",
+        "backups_required":false,
+        "backups_plan":"",
+        "monitoring_required":true,
+        "monitoring_plan":"Application logs and availability alerts",
+        "healthcheck_required":true,
+        "healthcheck":"GET /api/v1/health must return 200",
+        "rollback_strategy":"Redeploy the previous image and restore the snapshot if required",
+        "deployed_version":"v1.0.0",
+        "deployed_at":null,
+        "release_notes":"Initial HORUS release"
+    });
+    let (status, saved_deploy) = json_request(
+        &app,
+        "PUT",
+        &format!("/api/v1/phases/{deploy_phase_id}/deploy"),
+        Some(access_token),
+        Some(deploy),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(saved_deploy["profile"]["deployment_status"], "DEPLOYED");
+    assert!(saved_deploy["profile"]["deployed_at"].is_string());
+
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{deploy_phase_id}/deploy/artifacts/RELEASE_REPORT"),
+        Some(access_token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let mut changed_deploy = saved_deploy["profile"].clone();
+    changed_deploy["release_notes"] = json!("Initial HORUS release — documentation updated");
+    let (status, _) = json_request(
+        &app,
+        "PUT",
+        &format!("/api/v1/phases/{deploy_phase_id}/deploy"),
+        Some(access_token),
+        Some(changed_deploy),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let release_ready = sqlx::query_scalar::<_, bool>(
+        "SELECT completed FROM validation_criteria WHERE phase_id=$1 AND code='release_report_ready'",
+    )
+    .bind(deploy_phase_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert!(!release_ready);
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{deploy_phase_id}/validate"),
+        Some(access_token),
+        Some(json!({"comment":"Stale release report"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{deploy_phase_id}/deploy/artifacts/RELEASE_REPORT"),
+        Some(access_token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let release_version = sqlx::query_scalar::<_, i32>(
+        "SELECT version FROM deliverables WHERE phase_id=$1 AND type='RELEASE_REPORT' AND deleted_at IS NULL",
+    )
+    .bind(deploy_phase_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(release_version, 2);
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{deploy_phase_id}/validate"),
+        Some(access_token),
+        Some(json!({"comment":"HORUS project delivered"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let project_status =
+        sqlx::query_scalar::<_, String>("SELECT status::text FROM projects WHERE id=$1")
+            .bind(Uuid::parse_str(project_id).unwrap())
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    assert_eq!(project_status, "COMPLETED");
 }

@@ -137,6 +137,30 @@ export type TestWorkspaceData = {
   progress: { total: number; executed: number; passed: number; failed: number; blocked: number; percent: number; pass_rate: number };
   artifacts: string[];
 };
+export type DeployWorkspaceData = {
+  test_report_ready: boolean;
+  profile: {
+    target_environment: string;
+    production_url: string;
+    provider: string;
+    deployment_status: "PREPARING" | "READY" | "DEPLOYED" | "FAILED" | "ROLLED_BACK";
+    configuration_notes: string;
+    configuration_keys: unknown[];
+    migrations_required: boolean;
+    migrations_plan: string;
+    backups_required: boolean;
+    backups_plan: string;
+    monitoring_required: boolean;
+    monitoring_plan: string;
+    healthcheck_required: boolean;
+    healthcheck: string;
+    rollback_strategy: string;
+    deployed_version: string;
+    deployed_at: string | null;
+    release_notes: string;
+  };
+  artifacts: string[];
+};
 export type ProjectOverview = {
   project: {
     id: string;
@@ -318,4 +342,10 @@ export const api = {
     request<TestWorkspaceData>(`/phases/${phaseId}/test/defects/${defectId}`, { method: "PATCH", body: JSON.stringify({ status: "RESOLVED", resolution }) }, token),
   generateTestReport: (phaseId: string, token: string) =>
     request<unknown>(`/phases/${phaseId}/test/artifacts/TEST_REPORT`, { method: "POST" }, token),
+  deploy: (phaseId: string, token: string) =>
+    request<DeployWorkspaceData>(`/phases/${phaseId}/deploy`, {}, token),
+  saveDeploy: (phaseId: string, profile: DeployWorkspaceData["profile"], token: string) =>
+    request<DeployWorkspaceData>(`/phases/${phaseId}/deploy`, { method: "PUT", body: JSON.stringify(profile) }, token),
+  generateReleaseReport: (phaseId: string, token: string) =>
+    request<unknown>(`/phases/${phaseId}/deploy/artifacts/RELEASE_REPORT`, { method: "POST" }, token),
 };
