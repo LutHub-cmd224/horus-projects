@@ -1,3 +1,4 @@
+mod analyze;
 mod auth;
 mod build;
 mod decisions;
@@ -65,6 +66,7 @@ fn app(state: AppState) -> Router {
     Router::new()
         .route("/api/v1/health", get(health))
         .nest("/api/v1/auth", auth::routes::router())
+        .nest("/api/v1", analyze::routes::router())
         .nest("/api/v1/workspaces", workspaces::routes::router())
         .nest("/api/v1/projects", projects::routes::router())
         .nest("/api/v1", phases::routes::router())

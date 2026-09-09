@@ -196,6 +196,11 @@ async fn create_project(
     }
 
     let analyze_phase_id = analyze_phase_id.ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    sqlx::query("INSERT INTO analyze_profiles(phase_id) VALUES($1)")
+        .bind(analyze_phase_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let criteria = [
         ("problem_defined", "Problem defined"),
         ("target_user_defined", "Target user defined"),

@@ -1,224 +1,32 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type OverviewPhase, type ValidationCriterion } from "./api";
+import { api, type AnalyzeWorkspaceData, type OverviewPhase, type ValidationCriterion } from "./api";
+import { GuidedQuestion, NextAction, Suggestions } from "./GuidedUx";
 
-type AnalyzeWorkspaceProps = {
-  phase: OverviewPhase;
-  token: string;
-  onChanged: () => Promise<void> | void;
-};
+const empty: AnalyzeWorkspaceData = { problem: "", target_audiences: [], target_details: "", value_proposition: "", success_objectives: [], budget: "", deadline: "", platform: "", special_constraints: "", constraints_unknown: false, mvp_features: [] };
+const labels: Record<string, string> = { problem_defined: "décrire le problème", target_user_defined: "indiquer les personnes concernées", value_proposition_defined: "expliquer la valeur apportée", objectives_defined: "définir un signe de réussite", constraints_defined: "préciser les contraintes ou choisir « Je ne sais pas encore »", mvp_defined: "ajouter les éléments indispensables de la première version" };
 
-export function AnalyzeWorkspace({
-  phase,
-  token,
-  onChanged,
-}: AnalyzeWorkspaceProps) {
+export function AnalyzeWorkspace({ phase, token, onChanged }: { phase: OverviewPhase; token: string; onChanged: () => Promise<void> | void }) {
+  const [value, setValue] = useState(empty);
   const [criteria, setCriteria] = useState<ValidationCriterion[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState("");
-  const [validating, setValidating] = useState(false);
+  const [step, setStep] = useState(0);
+  const [item, setItem] = useState("");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.resolve().then(() => {
-      if (!cancelled) {
-        setLoading(true);
-        setError("");
-      }
-    });
-    api
-      .criteria(phase.id, token)
-      .then((nextCriteria) => {
-        if (!cancelled) setCriteria(nextCriteria);
-      })
-      .catch(() => {
-        if (!cancelled)
-          setError("Impossible de charger les critères de cette phase.");
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [phase.id, token]);
-
-  const required = useMemo(
-    () => criteria.filter((criterion) => criterion.required),
-    [criteria],
-  );
+  useEffect(() => { let active = true; Promise.all([api.analyze(phase.id, token), api.criteria(phase.id, token)]).then(([profile, next]) => { if (active) { setValue(profile); setCriteria(next); } }).catch(() => active && setError("Impossible de charger votre parcours.")); return () => { active = false; }; }, [phase.id, token]);
+  const required = criteria.filter((criterion) => criterion.required);
   const completed = required.filter((criterion) => criterion.completed).length;
-  const canValidate =
-    criteria.length > 0 &&
-    completed === required.length &&
-    phase.status !== "VALIDATED";
-
-  async function ensureStarted() {
-    if (phase.status !== "AVAILABLE") return;
-    await api.startPhase(phase.id, token);
-  }
-
-  async function toggleCriterion(criterion: ValidationCriterion) {
-    setBusyId(criterion.id);
-    setError("");
-    try {
-      await ensureStarted();
-      await api.updateCriterion(
-        phase.id,
-        criterion.id,
-        !criterion.completed,
-        token,
-      );
-      setCriteria((current) =>
-        current.map((item) =>
-          item.id === criterion.id
-            ? { ...item, completed: !item.completed }
-            : item,
-        ),
-      );
-      await onChanged();
-    } catch {
-      setError("La mise à jour du critère a échoué.");
-    } finally {
-      setBusyId("");
-    }
-  }
-
-  async function validate() {
-    setValidating(true);
-    setError("");
-    try {
-      await api.validatePhase(
-        phase.id,
-        token,
-        "Validation depuis HORUS Projects",
-      );
-      await onChanged();
-    } catch {
-      setError(
-        "La phase ne peut pas encore être validée. Vérifiez les critères requis.",
-      );
-    } finally {
-      setValidating(false);
-    }
-  }
-
-  return (
-    <section
-      className="mt-14 overflow-hidden rounded-[2rem] border border-black/10 bg-white/55"
-      id="analyze-workspace"
-    >
-      <div className="grid gap-8 p-6 sm:p-8 xl:grid-cols-[0.8fr_1.2fr]">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#d9503f]">
-            Phase 01 · Analyser
-          </p>
-          <h2 className="mt-4 text-4xl font-semibold tracking-[-0.05em]">
-            Voir clairement avant de construire.
-          </h2>
-          <p className="mt-5 max-w-lg text-sm leading-6 text-black/50">
-            Formalisez le problème, la cible, la valeur, les objectifs, les
-            contraintes et le périmètre MVP. HORUS bloque la suite tant que
-            l’analyse minimale n’est pas terminée.
-          </p>
-          <div className="mt-8 rounded-2xl bg-[#1b1b18] p-5 text-white">
-            <div className="flex items-end justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.16em] text-white/45">
-                  Progression requise
-                </p>
-                <p className="mt-2 text-sm text-white/60">
-                  {completed} / {required.length} critères
-                </p>
-              </div>
-              <p className="text-4xl font-semibold">
-                {required.length
-                  ? Math.round((completed / required.length) * 100)
-                  : 0}
-                %
-              </p>
-            </div>
-            <div className="mt-6 h-1 overflow-hidden bg-white/15">
-              <div
-                className="h-full bg-white transition-all"
-                style={{
-                  width: `${required.length ? (completed / required.length) * 100 : 0}%`,
-                }}
-              />
-            </div>
-          </div>
-        </div>
-        <div>
-          {loading ? (
-            <div className="grid min-h-64 place-items-center text-sm text-black/40">
-              Chargement des critères…
-            </div>
-          ) : criteria.length ? (
-            <div className="space-y-3">
-              {criteria.map((criterion, index) => (
-                <button
-                  className={`flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition ${criterion.completed ? "border-black bg-black text-white" : "border-black/10 bg-white/65 hover:border-black/25"} disabled:cursor-not-allowed disabled:opacity-60`}
-                  disabled={phase.status === "VALIDATED" || Boolean(busyId)}
-                  key={criterion.id}
-                  onClick={() => void toggleCriterion(criterion)}
-                  type="button"
-                >
-                  <span
-                    className={`grid size-8 shrink-0 place-items-center rounded-full border text-xs font-semibold ${criterion.completed ? "border-white/20 bg-white text-black" : "border-black/15"}`}
-                  >
-                    {criterion.completed
-                      ? "✓"
-                      : String(index + 1).padStart(2, "0")}
-                  </span>
-                  <span className="flex-1">
-                    <span className="block text-sm font-semibold">
-                      {criterion.label}
-                    </span>
-                    <span
-                      className={`mt-1 block text-[11px] uppercase tracking-[0.14em] ${criterion.completed ? "text-white/45" : "text-black/35"}`}
-                    >
-                      {criterion.required ? "Requis" : "Optionnel"} ·{" "}
-                      {criterion.code}
-                    </span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            !error && (
-              <p className="rounded-xl bg-black/5 px-4 py-3 text-sm text-black/55">
-                Aucun critère n’est configuré pour cette phase.
-              </p>
-            )
-          )}
-          {error && (
-            <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </p>
-          )}
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-black/40">
-              {phase.status === "VALIDATED"
-                ? "Analyse validée. Modéliser est maintenant disponible."
-                : canValidate
-                  ? "Tous les critères requis sont terminés."
-                  : "Complétez les critères requis pour valider."}
-            </p>
-            <button
-              className="rounded-full bg-[#d9503f] px-6 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-35"
-              disabled={!canValidate || validating}
-              onClick={() => void validate()}
-              type="button"
-            >
-              {validating
-                ? "Validation…"
-                : phase.status === "VALIDATED"
-                  ? "Phase validée"
-                  : "Valider Analyser →"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
+  const missing = required.filter((criterion) => !criterion.completed).map((criterion) => labels[criterion.code] ?? criterion.label);
+  const locked = phase.status === "VALIDATED";
+  async function save(next = true) { setBusy(true); setError(""); try { setValue(await api.saveAnalyze(phase.id, value, token)); setCriteria(await api.criteria(phase.id, token)); if (next) setStep((current) => Math.min(5, current + 1)); await onChanged(); } catch { setError("L’enregistrement a échoué. Réessaie dans un instant."); } finally { setBusy(false); } }
+  async function validate() { setBusy(true); setError(""); try { await api.validatePhase(phase.id, token, "Analyse guidée terminée"); await onChanged(); } catch { setError(`Il manque encore : ${missing.join(", ")}.`); } finally { setBusy(false); } }
+  function listField(key: "success_objectives" | "mvp_features", text: string) { if (!text.trim()) return; setValue((current) => ({ ...current, [key]: [...current[key], text.trim()] })); setItem(""); }
+  const questions = useMemo(() => [
+    <GuidedQuestion complete={!!value.problem.trim()} help="Décris simplement ce qui ne fonctionne pas aujourd’hui. Cela nous aide à construire la bonne solution." example="Je perds du temps à retrouver l’avancement de mes projets." number={1} title="Quel problème veux-tu résoudre ?"><textarea aria-label="Problème à résoudre" className="min-h-28 w-full rounded-2xl border border-black/10 p-4" disabled={locked} onChange={(event) => setValue({ ...value, problem: event.target.value })} placeholder="Aujourd’hui…" value={value.problem}/></GuidedQuestion>,
+    <GuidedQuestion complete={value.target_audiences.length > 0 || !!value.target_details.trim()} help="Choisis les personnes qui profiteront du produit, puis précise si besoin." number={2} title="Pour qui construis-tu ce produit ?"><Suggestions onToggle={(choice) => setValue({ ...value, target_audiences: value.target_audiences.includes(choice) ? value.target_audiences.filter((x) => x !== choice) : [...value.target_audiences, choice] })} options={["Particulier", "Freelance", "Entreprise", "Équipe", "Étudiant", "Autre"]} selected={value.target_audiences}/><input aria-label="Précision sur les personnes" className="mt-4 w-full rounded-xl border border-black/10 px-4 py-3" disabled={locked} onChange={(event) => setValue({ ...value, target_details: event.target.value })} placeholder="Quelques mots pour préciser…" value={value.target_details}/></GuidedQuestion>,
+    <GuidedQuestion complete={!!value.value_proposition.trim()} help="Explique le bénéfice concret, sans parler de technologie." example="Suivre leur travail en un seul endroit et savoir quoi faire ensuite." number={3} title="Qu’est-ce que ton produit va leur permettre de faire plus facilement ?"><textarea aria-label="Valeur du produit" className="min-h-24 w-full rounded-2xl border border-black/10 p-4" disabled={locked} onChange={(event) => setValue({ ...value, value_proposition: event.target.value })} value={value.value_proposition}/></GuidedQuestion>,
+    <GuidedQuestion complete={value.success_objectives.length > 0} help="Ajoute au moins un résultat observable qui indiquera que le projet est utile." example="Un utilisateur crée son premier projet en moins de 5 minutes." number={4} title="À quoi verras-tu que ton projet fonctionne ?"><Suggestions onToggle={(choice) => setValue({ ...value, success_objectives: value.success_objectives.includes(choice) ? value.success_objectives.filter((x) => x !== choice) : [...value.success_objectives, choice] })} options={["Les utilisateurs reviennent", "La tâche prend moins de temps", "Moins d’erreurs", "Premiers clients"]} selected={value.success_objectives}/><input aria-label="Autre objectif" className="mt-4 w-full rounded-xl border border-black/10 px-4 py-3" disabled={locked} onChange={(event) => setItem(event.target.value)} placeholder="Ajouter un autre signe de réussite" value={item}/><button className="mt-2 text-sm font-semibold" disabled={locked} onClick={() => listField("success_objectives", item)} type="button">+ Ajouter cet objectif</button></GuidedQuestion>,
+    <GuidedQuestion complete={value.constraints_unknown || [value.budget,value.deadline,value.platform,value.special_constraints].some((x) => x.trim())} help="Ces repères évitent de proposer une solution irréaliste. Une estimation suffit." number={5} title="Quelles limites devons-nous respecter ?"><div className="grid gap-3 sm:grid-cols-2">{([['budget','Budget'],['deadline','Délai'],['platform','Où sera utilisé le produit ?'],['special_constraints','Règles particulières']] as const).map(([key,label]) => <input aria-label={label} className="rounded-xl border border-black/10 px-4 py-3" disabled={locked || value.constraints_unknown} key={key} onChange={(event) => setValue({ ...value, [key]: event.target.value })} placeholder={label} value={value[key]}/>)}</div><label className="mt-4 flex gap-2 text-sm"><input checked={value.constraints_unknown} disabled={locked} onChange={(event) => setValue({ ...value, constraints_unknown: event.target.checked })} type="checkbox"/>Je ne sais pas encore</label></GuidedQuestion>,
+    <GuidedQuestion complete={value.mvp_features.length >= 3} help="Liste les 3 à 5 choses sans lesquelles la première version ne serait pas utile." example="Créer un projet · Inviter une personne · Voir les prochaines tâches." number={6} title="Quelles sont les choses indispensables pour la première version ?"><div className="flex gap-2"><input aria-label="Fonction indispensable" className="min-w-0 flex-1 rounded-xl border border-black/10 px-4 py-3" disabled={locked} onChange={(event) => setItem(event.target.value)} placeholder="Une chose indispensable" value={item}/><button className="rounded-xl bg-black px-4 text-white" disabled={locked || !item.trim()} onClick={() => listField("mvp_features", item)} type="button">Ajouter</button></div><div className="mt-3 grid gap-2">{value.mvp_features.map((feature, index) => <div className="rounded-xl bg-black/5 px-4 py-3 text-sm" key={`${feature}-${index}`}>{feature}</div>)}</div></GuidedQuestion>
+  ], [item, locked, value]);
+  return <section className="mt-14 rounded-[2rem] border border-black/10 bg-white/55 p-6 sm:p-8" id="analyze-workspace"><p className="text-xs font-semibold uppercase tracking-[.2em] text-[#d9503f]">Phase 01 · Comprendre ton idée</p><h2 className="mt-3 text-4xl font-semibold tracking-[-.05em]">Construisons les bonnes bases, ensemble.</h2><p className="mt-3 text-sm text-black/55">Réponds avec tes mots. HORUS transforme tes réponses en une analyse structurée.</p><div className="mt-6 flex items-center gap-4"><div className="h-2 flex-1 overflow-hidden rounded-full bg-black/10"><div className="h-full bg-[#d9503f]" style={{ width: `${required.length ? completed / required.length * 100 : 0}%` }}/></div><span className="text-sm font-semibold">{completed}/{required.length}</span></div><div className="mt-8">{questions[step]}</div>{error && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}<div className="mt-6 flex flex-wrap items-center justify-between gap-3"><button className="text-sm font-semibold disabled:opacity-30" disabled={step === 0} onClick={() => setStep((x) => x - 1)} type="button">← Question précédente</button><div className="flex gap-2"><button className="rounded-full border border-black/15 px-5 py-3 text-sm font-bold" disabled={busy || locked} onClick={() => void save(step < 5)} type="button">{step < 5 ? "Enregistrer et continuer" : "Enregistrer"}</button>{step === 5 && <button className="rounded-full bg-[#d9503f] px-5 py-3 text-sm font-bold text-white disabled:opacity-35" disabled={busy || missing.length > 0 || locked} onClick={() => void validate()} type="button">Terminer cette étape →</button>}</div></div><div className="mt-5"><NextAction>{locked ? "Ton analyse est terminée. Passe à la structure du produit." : missing.length ? missing[0] : "Tout est prêt : termine cette étape pour passer à la suite."}</NextAction>{step < 5 && <button className="mt-3 text-xs text-black/45" onClick={() => setStep(step + 1)} type="button">Voir la question suivante sans enregistrer →</button>}</div></section>;
 }
