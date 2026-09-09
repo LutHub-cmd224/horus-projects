@@ -114,6 +114,8 @@ async fn register_create_project_and_load_overview() {
     assert_eq!(overview["phases"][2]["required_criteria"], 7);
     assert_eq!(overview["phases"][3]["phase_type"], "BUILD");
     assert_eq!(overview["phases"][3]["required_criteria"], 6);
+    assert_eq!(overview["phases"][4]["phase_type"], "TEST");
+    assert_eq!(overview["phases"][4]["required_criteria"], 7);
     assert_eq!(overview["requirement_count"], 0);
     assert_eq!(overview["open_task_count"], 0);
     assert_eq!(overview["decision_count"], 0);
@@ -443,6 +445,186 @@ async fn register_create_project_and_load_overview() {
         &format!("/api/v1/phases/{build_phase_id}/build/tasks/{task_id}"),
         Some(access_token),
         Some(json!({"status":"TODO"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+
+    let test_phase_id = Uuid::parse_str(overview["phases"][4]["id"].as_str().unwrap()).unwrap();
+    let deploy_phase_id = Uuid::parse_str(overview["phases"][5]["id"].as_str().unwrap()).unwrap();
+    let (status, tests) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{test_phase_id}/test/cases"),
+        Some(access_token),
+        Some(json!({
+            "requirement_id":requirement_id,
+            "task_id":task_id,
+            "title":"Build workspace can be completed",
+            "test_type":"E2E",
+            "expected_result":"The workflow reaches a validated Build Plan"
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let case_id = tests["test_cases"][0]["id"].as_str().unwrap();
+
+    let (status, _) = json_request(
+        &app,
+        "PATCH",
+        &format!("/api/v1/phases/{test_phase_id}/test/cases/{case_id}"),
+        Some(access_token),
+        Some(json!({"status":"BLOCKED","actual_result":"Deployment gate unavailable"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, tests) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{test_phase_id}/test/defects"),
+        Some(access_token),
+        Some(json!({
+            "test_case_id":case_id,
+            "title":"Deployment gate unavailable",
+            "description":"The workflow cannot continue",
+            "severity":"BLOCKING"
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let defect_id = tests["defects"][0]["id"].as_str().unwrap();
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{test_phase_id}/test/artifacts/TEST_REPORT"),
+        Some(access_token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+
+    let (status, _) = json_request(
+        &app,
+        "PATCH",
+        &format!("/api/v1/phases/{test_phase_id}/test/defects/{defect_id}"),
+        Some(access_token),
+        Some(json!({"status":"RESOLVED","resolution":"Gate restored and verified"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, tests) = json_request(
+        &app,
+        "PATCH",
+        &format!("/api/v1/phases/{test_phase_id}/test/cases/{case_id}"),
+        Some(access_token),
+        Some(json!({"status":"PASSED","actual_result":"Workflow completed"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(tests["progress"]["pass_rate"], 100);
+
+    let (status, tests) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{test_phase_id}/test/defects"),
+        Some(access_token),
+        Some(json!({
+            "test_case_id":case_id,
+            "title":"Minor visual discrepancy",
+            "description":"Does not prevent the expected workflow",
+            "severity":"NON_BLOCKING"
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let non_blocking_defect_id = tests["defects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|defect| defect["severity"] == "NON_BLOCKING")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap();
+
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{test_phase_id}/test/artifacts/TEST_REPORT"),
+        Some(access_token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, _) = json_request(
+        &app,
+        "PATCH",
+        &format!("/api/v1/phases/{test_phase_id}/test/defects/{non_blocking_defect_id}"),
+        Some(access_token),
+        Some(json!({"status":"ACCEPTED","resolution":"Accepted residual visual risk"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let report_ready = sqlx::query_scalar::<_, bool>(
+        "SELECT completed FROM validation_criteria WHERE phase_id=$1 AND code='test_report_ready'",
+    )
+    .bind(test_phase_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert!(
+        !report_ready,
+        "workspace mutation must invalidate the report"
+    );
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{test_phase_id}/validate"),
+        Some(access_token),
+        Some(json!({"comment":"Stale report must be rejected"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{test_phase_id}/test/artifacts/TEST_REPORT"),
+        Some(access_token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let report_version = sqlx::query_scalar::<_, i32>(
+        "SELECT version FROM deliverables WHERE phase_id=$1 AND type='TEST_TEST_REPORT' AND deleted_at IS NULL",
+    )
+    .bind(test_phase_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(report_version, 2);
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{test_phase_id}/validate"),
+        Some(access_token),
+        Some(json!({"comment":"Test Report accepted"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let deploy_status =
+        sqlx::query_scalar::<_, String>("SELECT status::text FROM phases WHERE id=$1")
+            .bind(deploy_phase_id)
+            .fetch_one(&db)
+            .await
+            .unwrap();
+    assert_eq!(deploy_status, "AVAILABLE");
+
+    let (status, _) = json_request(
+        &app,
+        "PATCH",
+        &format!("/api/v1/phases/{test_phase_id}/test/cases/{case_id}"),
+        Some(access_token),
+        Some(json!({"status":"FAILED","actual_result":"Regression"})),
     )
     .await;
     assert_eq!(status, StatusCode::CONFLICT);
