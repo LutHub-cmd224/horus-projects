@@ -238,14 +238,18 @@ async fn update_criterion(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let phase_status =
-        sqlx::query_scalar::<_, String>("SELECT status::text FROM phases WHERE id = $1")
-            .bind(phase_id)
-            .fetch_one(&state.db)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let (phase_status, phase_type) = sqlx::query_as::<_, (String, String)>(
+        "SELECT status::text, phase_type::text FROM phases WHERE id = $1",
+    )
+    .bind(phase_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     if phase_status == "LOCKED" || phase_status == "VALIDATED" {
         return Err(StatusCode::CONFLICT);
+    }
+    if phase_type == "TEST" {
+        return Err(StatusCode::METHOD_NOT_ALLOWED);
     }
 
     let result = sqlx::query(

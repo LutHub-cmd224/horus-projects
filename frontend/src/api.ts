@@ -120,6 +120,23 @@ export type BuildWorkspaceData = {
   progress: { total: number; done: number; blocked: number; percent: number };
   artifacts: string[];
 };
+export type TestWorkspaceData = {
+  build_plan_ready: boolean;
+  requirements: { id: string; code: string; title: string }[];
+  tasks: { id: string; code: string; title: string }[];
+  test_cases: {
+    id: string; requirement_id: string | null; task_id: string | null; code: string;
+    title: string; test_type: string; expected_result: string;
+    actual_result: string | null; status: "NOT_RUN" | "PASSED" | "FAILED" | "BLOCKED";
+  }[];
+  defects: {
+    id: string; test_case_id: string; title: string; description: string;
+    severity: "BLOCKING" | "NON_BLOCKING"; status: "OPEN" | "RESOLVED" | "ACCEPTED";
+    resolution: string | null;
+  }[];
+  progress: { total: number; executed: number; passed: number; failed: number; blocked: number; percent: number; pass_rate: number };
+  artifacts: string[];
+};
 export type ProjectOverview = {
   project: {
     id: string;
@@ -289,4 +306,16 @@ export const api = {
       { method: "POST" },
       token,
     ),
+  testing: (phaseId: string, token: string) =>
+    request<TestWorkspaceData>(`/phases/${phaseId}/test`, {}, token),
+  createTestCase: (phaseId: string, value: { requirement_id?: string; task_id?: string; title: string; test_type: string; expected_result: string }, token: string) =>
+    request<TestWorkspaceData>(`/phases/${phaseId}/test/cases`, { method: "POST", body: JSON.stringify(value) }, token),
+  executeTestCase: (phaseId: string, caseId: string, status: string, actualResult: string, token: string) =>
+    request<TestWorkspaceData>(`/phases/${phaseId}/test/cases/${caseId}`, { method: "PATCH", body: JSON.stringify({ status, actual_result: actualResult || null }) }, token),
+  createTestDefect: (phaseId: string, value: { test_case_id: string; title: string; description: string; severity: string }, token: string) =>
+    request<TestWorkspaceData>(`/phases/${phaseId}/test/defects`, { method: "POST", body: JSON.stringify(value) }, token),
+  resolveTestDefect: (phaseId: string, defectId: string, resolution: string, token: string) =>
+    request<TestWorkspaceData>(`/phases/${phaseId}/test/defects/${defectId}`, { method: "PATCH", body: JSON.stringify({ status: "RESOLVED", resolution }) }, token),
+  generateTestReport: (phaseId: string, token: string) =>
+    request<unknown>(`/phases/${phaseId}/test/artifacts/TEST_REPORT`, { method: "POST" }, token),
 };

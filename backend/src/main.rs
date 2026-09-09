@@ -10,6 +10,7 @@ mod projects;
 mod requirements;
 mod state;
 mod tasks;
+mod testing;
 mod workspaces;
 
 #[cfg(test)]
@@ -72,6 +73,7 @@ fn app(state: AppState) -> Router {
         .nest("/api/v1", models::routes::router())
         .nest("/api/v1", requirements::routes::router())
         .nest("/api/v1", tasks::routes::router())
+        .nest("/api/v1", testing::routes::router())
         .nest("/api/v1", decisions::routes::router())
         .nest("/api/v1", overview::routes::router())
         .with_state(state)
