@@ -511,23 +511,6 @@ async fn register_create_project_and_load_overview() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let (status, _) = json_request(
-        &app,
-        "POST",
-        &format!("/api/v1/phases/{test_phase_id}/test/artifacts/TEST_REPORT"),
-        Some(access_token),
-        None,
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    let report_version = sqlx::query_scalar::<_, i32>(
-        "SELECT version FROM deliverables WHERE phase_id=$1 AND type='TEST_TEST_REPORT' AND deleted_at IS NULL",
-    )
-    .bind(test_phase_id)
-    .fetch_one(&db)
-    .await
-    .unwrap();
-    assert_eq!(report_version, 2);
     let (status, tests) = json_request(
         &app,
         "PATCH",
@@ -563,6 +546,23 @@ async fn register_create_project_and_load_overview() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{test_phase_id}/test/artifacts/TEST_REPORT"),
+        Some(access_token),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let report_version = sqlx::query_scalar::<_, i32>(
+        "SELECT version FROM deliverables WHERE phase_id=$1 AND type='TEST_TEST_REPORT' AND deleted_at IS NULL",
+    )
+    .bind(test_phase_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(report_version, 2);
     let (status, _) = json_request(
         &app,
         "POST",
