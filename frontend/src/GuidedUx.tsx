@@ -43,3 +43,15 @@ export function AdvancedSection({ children }: { children: ReactNode }) {
 export function NextAction({ children }: { children: ReactNode }) {
   return <p className="rounded-2xl bg-[#fff1e8] px-4 py-3 text-sm text-[#8b351f]"><strong>Prochaine étape :</strong> {children}</p>;
 }
+
+export function JourneyProgress({ current, total, label }: { current: number; total: number; label: string }) {
+  return <div aria-label={`${current} étapes sur ${total}`} className="flex items-center justify-between gap-5"><div><p className="text-xs uppercase tracking-[.18em] text-black/35">{label}</p><p className="mt-1 text-sm font-semibold">{current} étape{current > 1 ? "s" : ""} sur {total}</p></div><div className="flex gap-2">{Array.from({length:total},(_,index)=><span className={`size-2 rounded-full transition ${index<current?"bg-[#d9503f]":"bg-black/10"}`} key={index}/>)}</div></div>;
+}
+
+export function SuggestionCard({ children, selected, onClick }: { children: ReactNode; selected?: boolean; onClick: () => void }) {
+  return <button className={`w-full rounded-2xl border p-4 text-left text-sm leading-6 transition hover:-translate-y-0.5 ${selected?"border-black bg-black text-white":"border-black/10 bg-white/70 hover:border-black/25"}`} onClick={onClick} type="button">{children}</button>;
+}
+
+export function GeneratedProposal({ children, onUse }: { children: ReactNode; onUse?: () => void }) {
+  return <div className="rounded-2xl bg-[#1b1b18] p-5 text-white"><p className="text-[10px] uppercase tracking-[.18em] text-white/40">Proposition HORUS</p><div className="mt-3 text-sm leading-6 text-white/80">{children}</div>{onUse&&<button className="mt-4 rounded-full bg-white px-4 py-2 text-xs font-bold text-black" onClick={onUse} type="button">Utiliser cette formulation</button>}</div>;
+}
