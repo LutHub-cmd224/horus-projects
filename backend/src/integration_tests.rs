@@ -522,7 +522,7 @@ async fn register_create_project_and_load_overview() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(tests["progress"]["pass_rate"], 100);
 
-    let (status, _) = json_request(
+    let (status, tests) = json_request(
         &app,
         "POST",
         &format!("/api/v1/phases/{test_phase_id}/test/defects"),
@@ -536,6 +536,14 @@ async fn register_create_project_and_load_overview() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
+    let non_blocking_defect_id = tests["defects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|defect| defect["severity"] == "NON_BLOCKING")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap();
 
     let (status, _) = json_request(
         &app,
@@ -546,6 +554,37 @@ async fn register_create_project_and_load_overview() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
+
+    let (status, _) = json_request(
+        &app,
+        "PATCH",
+        &format!("/api/v1/phases/{test_phase_id}/test/defects/{non_blocking_defect_id}"),
+        Some(access_token),
+        Some(json!({"status":"ACCEPTED","resolution":"Accepted residual visual risk"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let report_ready = sqlx::query_scalar::<_, bool>(
+        "SELECT completed FROM validation_criteria WHERE phase_id=$1 AND code='test_report_ready'",
+    )
+    .bind(test_phase_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert!(
+        !report_ready,
+        "workspace mutation must invalidate the report"
+    );
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{test_phase_id}/validate"),
+        Some(access_token),
+        Some(json!({"comment":"Stale report must be rejected"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+
     let (status, _) = json_request(
         &app,
         "POST",

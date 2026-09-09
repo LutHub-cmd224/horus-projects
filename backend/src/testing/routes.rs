@@ -184,6 +184,7 @@ async fn refresh(
     ] {
         criterion(tx, phase_id, code, done, user_id).await?;
     }
+    criterion(tx, phase_id, "test_report_ready", false, user_id).await?;
     sqlx::query("UPDATE phases SET status='IN_PROGRESS',started_at=COALESCE(started_at,now()),updated_at=now() WHERE id=$1 AND status='AVAILABLE'").bind(phase_id).execute(&mut **tx).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(())
 }
