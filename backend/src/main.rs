@@ -17,6 +17,8 @@ mod workspaces;
 
 #[cfg(test)]
 mod integration_tests;
+#[cfg(test)]
+mod overview_regression_tests;
 
 use axum::{
     Json, Router,
@@ -48,7 +50,6 @@ fn cors_layer() -> CorsLayer {
     let origin = frontend_origin
         .parse::<HeaderValue>()
         .expect("FRONTEND_ORIGIN must be a valid HTTP origin");
-
     CorsLayer::new()
         .allow_origin(origin)
         .allow_methods([
@@ -93,7 +94,6 @@ async fn main() {
                 .unwrap_or_else(|_| "horus_api=debug,tower_http=debug".into()),
         )
         .init();
-
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let jwt_secret = std::env::var("JWT_SECRET").expect("JWT_SECRET must be set");
     let db = PgPoolOptions::new()
@@ -105,7 +105,6 @@ async fn main() {
         .run(&db)
         .await
         .expect("failed to run database migrations");
-
     let state = AppState {
         db,
         jwt_secret: jwt_secret.into_bytes(),
@@ -136,5 +135,5 @@ async fn shutdown_signal() {
     };
     #[cfg(not(unix))]
     let terminate = std::future::pending::<()>();
-    tokio::select! { _ = ctrl_c => {}, _ = terminate => {}, }
+    tokio::select! { _=ctrl_c=>{}, _=terminate=>{}, }
 }
