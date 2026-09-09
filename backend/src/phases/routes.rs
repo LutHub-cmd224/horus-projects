@@ -248,7 +248,7 @@ async fn update_criterion(
     if phase_status == "LOCKED" || phase_status == "VALIDATED" {
         return Err(StatusCode::CONFLICT);
     }
-    if phase_type == "TEST" || phase_type == "DEPLOY" {
+    if matches!(phase_type.as_str(), "ANALYZE" | "MODEL" | "TEST" | "DEPLOY") {
         return Err(StatusCode::METHOD_NOT_ALLOWED);
     }
 

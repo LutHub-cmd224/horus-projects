@@ -122,19 +122,57 @@ async fn register_create_project_and_load_overview() {
     assert_eq!(overview["open_task_count"], 0);
     assert_eq!(overview["decision_count"], 0);
 
+    let analyze_phase_id = overview["phases"][0]["id"].as_str().unwrap();
+    let (status, _) = json_request(
+        &app,
+        "PUT",
+        &format!("/api/v1/phases/{analyze_phase_id}/analyze"),
+        Some(access_token),
+        Some(json!({
+            "problem":"Teams lose track of project progress",
+            "target_audiences":["Équipe"],
+            "target_details":"Small product teams",
+            "value_proposition":"See the next useful action in one place",
+            "success_objectives":["Create a project in under five minutes"],
+            "budget":"Small initial budget",
+            "deadline":"Three months",
+            "platform":"Web",
+            "special_constraints":"Accessible without technical expertise",
+            "constraints_unknown":false,
+            "mvp_features":["Create a project","Invite a teammate","Track progress"]
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let analyze_completed = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM validation_criteria WHERE phase_id=$1 AND required AND completed",
+    )
+    .bind(Uuid::parse_str(analyze_phase_id).unwrap())
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert_eq!(
+        analyze_completed, 6,
+        "guided answers calculate all Analyze criteria"
+    );
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{analyze_phase_id}/validate"),
+        Some(access_token),
+        Some(json!({"comment":"Guided analysis complete"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
     let model_phase_id = Uuid::parse_str(overview["phases"][1]["id"].as_str().unwrap()).unwrap();
-    sqlx::query("UPDATE phases SET status = 'AVAILABLE' WHERE id = $1")
-        .bind(model_phase_id)
-        .execute(&db)
-        .await
-        .unwrap();
     let model = json!({
         "entities": [
-            {"conceptual_name":"User","logical_name":"User","physical_name":"users","description":null,"attributes":[]},
-            {"conceptual_name":"Project","logical_name":"Project","physical_name":"projects","description":null,"attributes":[]}
+            {"conceptual_name":"Utilisateur","logical_name":null,"physical_name":null,"description":"Une personne qui utilise le produit","attributes":[{"conceptual_name":"Identifiant","logical_name":null,"physical_name":null,"data_type":null,"is_primary_key":true,"is_unique":true,"is_nullable":false,"default_value":null}]},
+            {"conceptual_name":"Projet","logical_name":null,"physical_name":null,"description":"Le travail suivi","attributes":[{"conceptual_name":"Nom","logical_name":null,"physical_name":null,"data_type":null,"is_primary_key":true,"is_unique":false,"is_nullable":false,"default_value":null}]}
         ],
-        "relationships": [{"name":"owns","source_entity":"User","target_entity":"Project","source_cardinality":"1","target_cardinality":"0..N","description":null}],
-        "business_rules": [],
+        "relationships": [{"name":"peut avoir plusieurs","source_entity":"Utilisateur","target_entity":"Projet","source_cardinality":"1","target_cardinality":"0..N","description":"Un utilisateur peut avoir plusieurs projets"}],
+        "business_rules": [{"title":"Appartenance","description":"Un projet appartient toujours à un utilisateur"}],
         "artifacts": []
     });
     let (status, _) = json_request(
@@ -173,12 +211,37 @@ async fn register_create_project_and_load_overview() {
         "artifact insert must roll back with its criterion update"
     );
 
+    sqlx::query("INSERT INTO validation_criteria(phase_id,code,label,required,completed) VALUES($1,'mcd_defined','MCD ready',true,false)")
+        .bind(model_phase_id).execute(&db).await.unwrap();
+    for level in ["MCD", "MLD", "MPD"] {
+        let (status, _) = json_request(
+            &app,
+            "POST",
+            &format!("/api/v1/phases/{model_phase_id}/model/artifacts/{level}"),
+            Some(access_token),
+            None,
+        )
+        .await;
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "{level} is derived from non-technical answers"
+        );
+    }
+    let derived = sqlx::query_as::<_, (Option<String>, Option<String>, Option<String>)>("SELECT logical_name,physical_name,data_type FROM model_attributes WHERE conceptual_name='Identifiant' AND entity_id IN (SELECT id FROM model_entities WHERE phase_id=$1)")
+        .bind(model_phase_id).fetch_one(&db).await.unwrap();
+    assert!(derived.0.is_some() && derived.1.is_some() && derived.2.is_some());
+    let (status, _) = json_request(
+        &app,
+        "POST",
+        &format!("/api/v1/phases/{model_phase_id}/validate"),
+        Some(access_token),
+        Some(json!({"comment":"Guided model generated"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
     let design_phase_id = Uuid::parse_str(overview["phases"][2]["id"].as_str().unwrap()).unwrap();
-    sqlx::query("UPDATE phases SET status = 'AVAILABLE' WHERE id = $1")
-        .bind(design_phase_id)
-        .execute(&db)
-        .await
-        .unwrap();
     let design = json!({
         "components": [
             {"name":"Web","category":"FRONTEND","responsibility":"User experience","technology":"React"},

@@ -37,6 +37,19 @@ export type ValidationCriterion = {
   required: boolean;
   completed: boolean;
 };
+export type AnalyzeWorkspaceData = {
+  problem: string;
+  target_audiences: string[];
+  target_details: string;
+  value_proposition: string;
+  success_objectives: string[];
+  budget: string;
+  deadline: string;
+  platform: string;
+  special_constraints: string;
+  constraints_unknown: boolean;
+  mvp_features: string[];
+};
 export type ModelAttribute = {
   conceptual_name: string;
   logical_name: string | null;
@@ -246,6 +259,14 @@ export const api = {
     request<void>(
       `/phases/${phaseId}/validate`,
       { method: "POST", body: JSON.stringify({ comment: comment || null }) },
+      token,
+    ),
+  analyze: (phaseId: string, token: string) =>
+    request<AnalyzeWorkspaceData>(`/phases/${phaseId}/analyze`, {}, token),
+  saveAnalyze: (phaseId: string, value: AnalyzeWorkspaceData, token: string) =>
+    request<AnalyzeWorkspaceData>(
+      `/phases/${phaseId}/analyze`,
+      { method: "PUT", body: JSON.stringify(value) },
       token,
     ),
   model: (phaseId: string, token: string) =>

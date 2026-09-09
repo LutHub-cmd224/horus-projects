@@ -97,6 +97,38 @@ fn writable(role: &str, status: &str) -> Result<(), StatusCode> {
     Ok(())
 }
 
+fn technical_name(value: &str) -> String {
+    let mut result = String::new();
+    let mut separator = false;
+    for character in value.trim().to_lowercase().chars() {
+        if character.is_ascii_alphanumeric() {
+            if separator && !result.is_empty() {
+                result.push('_');
+            }
+            result.push(character);
+            separator = false;
+        } else {
+            separator = true;
+        }
+    }
+    result
+}
+
+fn suggested_type(name: &str) -> &'static str {
+    let name = technical_name(name);
+    if name == "id" || name.ends_with("_id") {
+        "UUID"
+    } else if name.starts_with("is_") || name.starts_with("has_") {
+        "BOOLEAN"
+    } else if name.contains("date") || name.ends_with("_at") {
+        "TIMESTAMPTZ"
+    } else if name.contains("prix") || name.contains("price") || name.contains("montant") {
+        "NUMERIC"
+    } else {
+        "TEXT"
+    }
+}
+
 async fn workspace(state: &AppState, phase_id: Uuid) -> Result<ModelWorkspace, StatusCode> {
     let entity_rows = sqlx::query_as::<_, (Uuid,String,Option<String>,Option<String>,Option<String>)>("SELECT id,conceptual_name,logical_name,physical_name,description FROM model_entities WHERE phase_id=$1 ORDER BY position,created_at").bind(phase_id).fetch_all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let mut entities = Vec::new();
@@ -201,10 +233,41 @@ async fn save_model(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let mut ids = HashMap::new();
     for (position, e) in payload.entities.iter().enumerate() {
-        let id=sqlx::query_scalar::<_,Uuid>("INSERT INTO model_entities(phase_id,conceptual_name,logical_name,physical_name,description,position) VALUES($1,$2,$3,$4,$5,$6) RETURNING id").bind(phase_id).bind(e.conceptual_name.trim()).bind(&e.logical_name).bind(&e.physical_name).bind(&e.description).bind(position as i32).fetch_one(&mut *tx).await.map_err(|_|StatusCode::CONFLICT)?;
+        let derived_name = technical_name(&e.conceptual_name);
+        let logical_name = e
+            .logical_name
+            .as_deref()
+            .filter(|v| !v.trim().is_empty())
+            .map(str::trim)
+            .unwrap_or(&derived_name);
+        let physical_name = e
+            .physical_name
+            .as_deref()
+            .filter(|v| !v.trim().is_empty())
+            .map(str::trim)
+            .unwrap_or(&derived_name);
+        let id=sqlx::query_scalar::<_,Uuid>("INSERT INTO model_entities(phase_id,conceptual_name,logical_name,physical_name,description,position) VALUES($1,$2,$3,$4,$5,$6) RETURNING id").bind(phase_id).bind(e.conceptual_name.trim()).bind(logical_name).bind(physical_name).bind(&e.description).bind(position as i32).fetch_one(&mut *tx).await.map_err(|_|StatusCode::CONFLICT)?;
         ids.insert(e.conceptual_name.clone(), id);
         for (p, a) in e.attributes.iter().enumerate() {
-            sqlx::query("INSERT INTO model_attributes(entity_id,conceptual_name,logical_name,physical_name,data_type,is_primary_key,is_unique,is_nullable,default_value,position) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)").bind(id).bind(a.conceptual_name.trim()).bind(&a.logical_name).bind(&a.physical_name).bind(&a.data_type).bind(a.is_primary_key).bind(a.is_unique).bind(a.is_nullable).bind(&a.default_value).bind(p as i32).execute(&mut *tx).await.map_err(|_|StatusCode::CONFLICT)?;
+            let attribute_name = technical_name(&a.conceptual_name);
+            let logical_name = a
+                .logical_name
+                .as_deref()
+                .filter(|v| !v.trim().is_empty())
+                .map(str::trim)
+                .unwrap_or(&attribute_name);
+            let physical_name = a
+                .physical_name
+                .as_deref()
+                .filter(|v| !v.trim().is_empty())
+                .map(str::trim)
+                .unwrap_or(&attribute_name);
+            let data_type = a
+                .data_type
+                .as_deref()
+                .filter(|v| !v.trim().is_empty())
+                .unwrap_or_else(|| suggested_type(&a.conceptual_name));
+            sqlx::query("INSERT INTO model_attributes(entity_id,conceptual_name,logical_name,physical_name,data_type,is_primary_key,is_unique,is_nullable,default_value,position) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)").bind(id).bind(a.conceptual_name.trim()).bind(logical_name).bind(physical_name).bind(data_type).bind(a.is_primary_key).bind(a.is_unique).bind(a.is_nullable).bind(&a.default_value).bind(p as i32).execute(&mut *tx).await.map_err(|_|StatusCode::CONFLICT)?;
         }
     }
     for r in &payload.relationships {
@@ -236,6 +299,8 @@ async fn save_model(
     ] {
         sqlx::query("UPDATE validation_criteria SET completed=$2,completed_by=CASE WHEN $2 THEN $3 ELSE NULL END,completed_at=CASE WHEN $2 THEN now() ELSE NULL END WHERE phase_id=$1 AND code=$4").bind(phase_id).bind(done).bind(u).bind(code).execute(&mut *tx).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     }
+    sqlx::query("UPDATE validation_criteria SET completed=false,completed_by=NULL,completed_at=NULL WHERE phase_id=$1 AND code IN ('mcd_defined','mld_defined','mpd_defined')")
+        .bind(phase_id).execute(&mut *tx).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     tx.commit()
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

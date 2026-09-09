@@ -1,55 +1,31 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AnalyzeWorkspace } from './AnalyzeWorkspace';
-import { api, type OverviewPhase, type ValidationCriterion } from './api';
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { AnalyzeWorkspace } from "./AnalyzeWorkspace";
+import { api, type AnalyzeWorkspaceData, type OverviewPhase, type ValidationCriterion } from "./api";
 
-const phase: OverviewPhase = {
-  id: 'analyze-phase',
-  phase_type: 'ANALYZE',
-  position: 1,
-  status: 'AVAILABLE',
-  required_criteria: 2,
-  completed_required_criteria: 0,
-};
+const phase: OverviewPhase = { id: "analyze", phase_type: "ANALYZE", position: 1, status: "AVAILABLE", required_criteria: 6, completed_required_criteria: 0 };
+const profile: AnalyzeWorkspaceData = { problem: "", target_audiences: [], target_details: "", value_proposition: "", success_objectives: [], budget: "", deadline: "", platform: "", special_constraints: "", constraints_unknown: false, mvp_features: [] };
+const criteria: ValidationCriterion[] = ["problem_defined","target_user_defined","value_proposition_defined","objectives_defined","constraints_defined","mvp_defined"].map((code,index) => ({ id:String(index),phase_id:"analyze",code,label:code,required:true,completed:false }));
 
-const criteria: ValidationCriterion[] = [
-  { id: 'problem', phase_id: phase.id, code: 'PROBLEM', label: 'Problème formulé', required: true, completed: false },
-  { id: 'target', phase_id: phase.id, code: 'TARGET', label: 'Cible identifiée', required: true, completed: false },
-];
-
-describe('AnalyzeWorkspace', () => {
-  afterEach(cleanup);
-
-  beforeEach(() => {
-    vi.restoreAllMocks();
+describe("AnalyzeWorkspace guided journey", () => {
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+  it("asks a plain-language question and saves the answer without manual criteria", async () => {
+    vi.spyOn(api,"analyze").mockResolvedValue(profile);
+    vi.spyOn(api,"criteria").mockResolvedValue(criteria);
+    const save = vi.spyOn(api,"saveAnalyze").mockImplementation(async (_id,value) => value);
+    const updateCriterion = vi.spyOn(api,"updateCriterion");
+    render(<AnalyzeWorkspace onChanged={vi.fn()} phase={phase} token="token"/>);
+    fireEvent.change(await screen.findByLabelText(/problème à résoudre/i), { target:{ value:"Je perds le fil de mes projets" } });
+    fireEvent.click(screen.getByRole("button",{name:/enregistrer et continuer/i}));
+    await waitFor(() => expect(save).toHaveBeenCalled());
+    expect(save.mock.calls[0][1].problem).toContain("perds le fil");
+    expect(updateCriterion).not.toHaveBeenCalled();
+    expect(await screen.findByText(/pour qui construis-tu/i)).toBeInTheDocument();
   });
-
-  it('starts Analyser, completes a criterion, and refreshes the overview', async () => {
-    vi.spyOn(api, 'criteria').mockResolvedValue(criteria);
-    const startPhase = vi.spyOn(api, 'startPhase').mockResolvedValue(undefined);
-    const updateCriterion = vi.spyOn(api, 'updateCriterion').mockResolvedValue(undefined);
-    const onChanged = vi.fn().mockResolvedValue(undefined);
-
-    render(<AnalyzeWorkspace onChanged={onChanged} phase={phase} token="token" />);
-    fireEvent.click(await screen.findByRole('button', { name: /problème formulé/i }));
-
-    await waitFor(() => expect(updateCriterion).toHaveBeenCalledWith(phase.id, 'problem', true, 'token'));
-    expect(startPhase).toHaveBeenCalledWith(phase.id, 'token');
-    expect(onChanged).toHaveBeenCalledOnce();
-    expect(screen.getByText('1 / 2 critères')).toBeInTheDocument();
-  });
-
-  it('validates Analyser when every required criterion is complete', async () => {
-    vi.spyOn(api, 'criteria').mockResolvedValue(criteria.map((criterion) => ({ ...criterion, completed: true })));
-    const validatePhase = vi.spyOn(api, 'validatePhase').mockResolvedValue(undefined);
-    const onChanged = vi.fn().mockResolvedValue(undefined);
-
-    render(<AnalyzeWorkspace onChanged={onChanged} phase={{ ...phase, status: 'IN_PROGRESS' }} token="token" />);
-    const validateButton = await screen.findByRole('button', { name: /valider analyser/i });
-    expect(validateButton).toBeEnabled();
-    fireEvent.click(validateButton);
-
-    await waitFor(() => expect(validatePhase).toHaveBeenCalledWith(phase.id, 'token', 'Validation depuis HORUS Projects'));
-    expect(onChanged).toHaveBeenCalledOnce();
+  it("explains the next missing action", async () => {
+    vi.spyOn(api,"analyze").mockResolvedValue(profile);
+    vi.spyOn(api,"criteria").mockResolvedValue(criteria);
+    render(<AnalyzeWorkspace onChanged={vi.fn()} phase={phase} token="token"/>);
+    expect(await screen.findByText(/décrire le problème/i)).toBeInTheDocument();
   });
 });
