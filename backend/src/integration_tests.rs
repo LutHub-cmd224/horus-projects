@@ -118,35 +118,11 @@ async fn register_create_project_and_load_overview() {
     assert_eq!(overview["phases"][4]["required_criteria"], 7);
     assert_eq!(overview["phases"][5]["phase_type"], "DEPLOY");
     assert_eq!(overview["phases"][5]["required_criteria"], 9);
-    assert_eq!(overview["next_action"]["phase"], "ANALYZE");
-    assert_eq!(overview["next_action"]["step"], "problem_defined");
     assert_eq!(overview["requirement_count"], 0);
     assert_eq!(overview["open_task_count"], 0);
     assert_eq!(overview["decision_count"], 0);
 
     let analyze_phase_id = overview["phases"][0]["id"].as_str().unwrap();
-    sqlx::query("UPDATE validation_criteria SET completed=true WHERE phase_id=$1")
-        .bind(Uuid::parse_str(analyze_phase_id).unwrap())
-        .execute(&db)
-        .await
-        .unwrap();
-    let (status, historical_overview) = json_request(
-        &app,
-        "GET",
-        &format!("/api/v1/projects/{project_id}/overview"),
-        Some(access_token),
-        None,
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(
-        historical_overview["phases"][0]["completed_required_criteria"],
-        0
-    );
-    assert_eq!(
-        historical_overview["next_action"]["step"],
-        "problem_defined"
-    );
     let (status, _) = json_request(
         &app,
         "PUT",

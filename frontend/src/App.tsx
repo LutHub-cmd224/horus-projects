@@ -5,7 +5,6 @@ import { DesignWorkspace } from "./DesignWorkspace";
 import { BuildWorkspace } from "./BuildWorkspace";
 import { TestWorkspace } from "./TestWorkspace";
 import { DeployWorkspace } from "./DeployWorkspace";
-import { HorusJourney } from "./HorusJourney";
 import {
   api,
   type Project,
@@ -87,15 +86,6 @@ const demoOverview: ProjectOverview = {
     code: "DEC-005",
     title: "Modular Monolith",
     status: "ACCEPTED",
-  },
-  next_action: {
-    phase: "DESIGN",
-    phase_id: "3",
-    step: "ux_flows_defined",
-    title: "Choisir comment le produit sera utilisé",
-    cta: "Continuer",
-    reason: "HORUS transformera les usages en proposition de conception.",
-    blocked: false,
   },
 };
 function phaseProgress(p: ProjectOverview["phases"][number]) {
@@ -723,7 +713,7 @@ export default function App() {
       </div>
     );
   return (
-    <HorusJourney
+    <Dashboard
       onExit={exit}
       onRefresh={refreshOverview}
       onSelectProject={setSelectedProjectId}
