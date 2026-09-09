@@ -186,15 +186,6 @@ export type ProjectOverview = {
   open_task_count: number;
   decision_count: number;
   latest_decision: { code: string; title: string; status: string } | null;
-  next_action: {
-    phase: string;
-    phase_id: string;
-    step: string;
-    title: string;
-    cta: string;
-    reason: string;
-    blocked: boolean;
-  } | null;
 };
 
 async function request<T>(
