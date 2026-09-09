@@ -321,12 +321,71 @@ async fn register_create_project_and_load_overview() {
             "repository_url":"https://github.com/example/horus",
             "default_branch":"main",
             "integration_strategy":"PULL_REQUEST",
-            "ci_required":true,
+            "ci_required":false,
+            "ci_configured":false,
             "definition_of_done":["Tests pass","Review approved"]
         })),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
+    let github_ready = sqlx::query_scalar::<_, bool>(
+        "SELECT completed FROM validation_criteria WHERE phase_id=$1 AND code='github_ready'",
+    )
+    .bind(build_phase_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert!(github_ready, "optional CI must not block GitHub readiness");
+
+    let (status, _) = json_request(
+        &app,
+        "PUT",
+        &format!("/api/v1/phases/{build_phase_id}/build/github"),
+        Some(access_token),
+        Some(json!({
+            "repository_url":"https://github.com/example/horus",
+            "default_branch":"main",
+            "integration_strategy":"PULL_REQUEST",
+            "ci_required":true,
+            "ci_configured":false,
+            "definition_of_done":["Tests pass","Review approved"]
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let github_ready = sqlx::query_scalar::<_, bool>(
+        "SELECT completed FROM validation_criteria WHERE phase_id=$1 AND code='github_ready'",
+    )
+    .bind(build_phase_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert!(!github_ready, "required CI needs explicit configuration");
+
+    let (status, _) = json_request(
+        &app,
+        "PUT",
+        &format!("/api/v1/phases/{build_phase_id}/build/github"),
+        Some(access_token),
+        Some(json!({
+            "repository_url":"https://github.com/example/horus",
+            "default_branch":"main",
+            "integration_strategy":"PULL_REQUEST",
+            "ci_required":true,
+            "ci_configured":true,
+            "definition_of_done":["Tests pass","Review approved"]
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let github_ready = sqlx::query_scalar::<_, bool>(
+        "SELECT completed FROM validation_criteria WHERE phase_id=$1 AND code='github_ready'",
+    )
+    .bind(build_phase_id)
+    .fetch_one(&db)
+    .await
+    .unwrap();
+    assert!(github_ready, "configured required CI completes readiness");
 
     let (status, _) = json_request(
         &app,

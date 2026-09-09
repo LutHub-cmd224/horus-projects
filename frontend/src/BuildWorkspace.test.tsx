@@ -15,6 +15,7 @@ const data: BuildWorkspaceData = {
     default_branch: "main",
     integration_strategy: "PULL_REQUEST",
     ci_required: true,
+    ci_configured: false,
     definition_of_done: [],
   },
   progress: { total: 0, done: 0, blocked: 0, percent: 0 },
@@ -78,5 +79,52 @@ describe("BuildWorkspace", () => {
     );
     expect(await screen.findByPlaceholderText("Nouvelle tâche")).toBeDisabled();
     expect(screen.getByRole("button", { name: /Build Plan/ })).toBeDisabled();
+  });
+
+  it("distinguishes optional CI from configured required CI", async () => {
+    vi.spyOn(api, "build").mockResolvedValue({
+      ...data,
+      github: {
+        ...data.github,
+        repository_url: "https://github.com/example/horus",
+        definition_of_done: ["Tests pass"],
+      },
+    });
+    const save = vi
+      .spyOn(api, "saveBuildGithub")
+      .mockImplementation(async (_phaseId, github) => ({
+        ...data,
+        github,
+      }));
+    render(<BuildWorkspace onChanged={vi.fn()} phase={phase} token="token" />);
+
+    const required = await screen.findByRole("checkbox", {
+      name: "CI requise",
+    });
+    const configured = screen.getByRole("checkbox", {
+      name: "CI configurée",
+    });
+    expect(configured).not.toBeDisabled();
+    fireEvent.click(required);
+    expect(configured).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer la préparation" }));
+    await waitFor(() =>
+      expect(save).toHaveBeenLastCalledWith(
+        "build",
+        expect.objectContaining({ ci_required: false, ci_configured: false }),
+        "token",
+      ),
+    );
+
+    fireEvent.click(required);
+    fireEvent.click(configured);
+    fireEvent.click(screen.getByRole("button", { name: "Enregistrer la préparation" }));
+    await waitFor(() =>
+      expect(save).toHaveBeenLastCalledWith(
+        "build",
+        expect.objectContaining({ ci_required: true, ci_configured: true }),
+        "token",
+      ),
+    );
   });
 });

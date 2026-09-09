@@ -114,6 +114,7 @@ export type BuildWorkspaceData = {
     default_branch: string;
     integration_strategy: "PULL_REQUEST" | "TRUNK_BASED" | "GIT_FLOW";
     ci_required: boolean;
+    ci_configured: boolean;
     definition_of_done: unknown[];
   };
   progress: { total: number; done: number; blocked: number; percent: number };

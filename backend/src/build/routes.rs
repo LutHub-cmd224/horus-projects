@@ -47,6 +47,7 @@ pub struct GithubProfile {
     default_branch: String,
     integration_strategy: String,
     ci_required: bool,
+    ci_configured: bool,
     definition_of_done: Value,
 }
 
@@ -171,7 +172,7 @@ async fn refresh_criteria(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let accepted = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM decisions WHERE phase_id=$1 AND status='ACCEPTED' AND deleted_at IS NULL)").bind(phase_id).fetch_one(&mut **tx).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
-    let github = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM build_profiles WHERE phase_id=$1 AND repository_url<>'' AND default_branch<>'' AND jsonb_array_length(definition_of_done)>0)").bind(phase_id).fetch_one(&mut **tx).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    let github = sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM build_profiles WHERE phase_id=$1 AND repository_url<>'' AND default_branch<>'' AND jsonb_array_length(definition_of_done)>0 AND (NOT ci_required OR ci_configured))").bind(phase_id).fetch_one(&mut **tx).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     for (code, completed) in [
         ("design_pack_available", design_pack),
         ("backlog_ready", total > 0),
@@ -194,7 +195,7 @@ async fn workspace(
     let requirements=sqlx::query_as::<_,Requirement>("SELECT id,code,title,status::text status FROM requirements WHERE project_id=$1 AND deleted_at IS NULL ORDER BY code").bind(project_id).fetch_all(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     let tasks=sqlx::query_as::<_,Task>("SELECT id,requirement_id,code,title,description,status::text status,priority::text priority FROM tasks WHERE phase_id=$1 AND deleted_at IS NULL ORDER BY created_at").bind(phase_id).fetch_all(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     let decisions=sqlx::query_as::<_,Decision>("SELECT id,code,title,decision,status::text status FROM decisions WHERE phase_id=$1 AND deleted_at IS NULL ORDER BY created_at").bind(phase_id).fetch_all(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
-    let github=sqlx::query_as::<_,GithubProfile>("SELECT repository_url,default_branch,integration_strategy,ci_required,definition_of_done FROM build_profiles WHERE phase_id=$1").bind(phase_id).fetch_optional(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?.unwrap_or(GithubProfile{repository_url:String::new(),default_branch:"main".into(),integration_strategy:"PULL_REQUEST".into(),ci_required:true,definition_of_done:json!([])});
+    let github=sqlx::query_as::<_,GithubProfile>("SELECT repository_url,default_branch,integration_strategy,ci_required,ci_configured,definition_of_done FROM build_profiles WHERE phase_id=$1").bind(phase_id).fetch_optional(&state.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?.unwrap_or(GithubProfile{repository_url:String::new(),default_branch:"main".into(),integration_strategy:"PULL_REQUEST".into(),ci_required:true,ci_configured:false,definition_of_done:json!([])});
     let total = tasks.len() as i64;
     let done = tasks.iter().filter(|task| task.status == "DONE").count() as i64;
     let blocked = tasks.iter().filter(|task| task.status == "BLOCKED").count() as i64;
@@ -253,7 +254,7 @@ async fn save_github(
         .begin()
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    sqlx::query("INSERT INTO build_profiles(phase_id,repository_url,default_branch,integration_strategy,ci_required,definition_of_done)VALUES($1,$2,$3,$4,$5,$6)ON CONFLICT(phase_id)DO UPDATE SET repository_url=$2,default_branch=$3,integration_strategy=$4,ci_required=$5,definition_of_done=$6,updated_at=now()").bind(phase_id).bind(profile.repository_url.trim()).bind(profile.default_branch.trim()).bind(&profile.integration_strategy).bind(profile.ci_required).bind(&profile.definition_of_done).execute(&mut*tx).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    sqlx::query("INSERT INTO build_profiles(phase_id,repository_url,default_branch,integration_strategy,ci_required,ci_configured,definition_of_done)VALUES($1,$2,$3,$4,$5,$6,$7)ON CONFLICT(phase_id)DO UPDATE SET repository_url=$2,default_branch=$3,integration_strategy=$4,ci_required=$5,ci_configured=$6,definition_of_done=$7,updated_at=now()").bind(phase_id).bind(profile.repository_url.trim()).bind(profile.default_branch.trim()).bind(&profile.integration_strategy).bind(profile.ci_required).bind(profile.ci_configured).bind(&profile.definition_of_done).execute(&mut*tx).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     refresh_criteria(&mut tx, phase_id, project_id, user_id).await?;
     tx.commit()
         .await

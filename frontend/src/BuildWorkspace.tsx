@@ -11,6 +11,7 @@ const empty: BuildWorkspaceData = {
     default_branch: "main",
     integration_strategy: "PULL_REQUEST",
     ci_required: true,
+    ci_configured: false,
     definition_of_done: [],
   },
   progress: { total: 0, done: 0, blocked: 0, percent: 0 },
@@ -151,6 +152,8 @@ export function BuildWorkspace({
           <div className="mt-4 grid gap-2">
             <input aria-label="Dépôt GitHub" className="rounded-lg border p-2 text-sm" disabled={locked} onChange={(e) => setData((v) => ({ ...v, github: { ...v.github, repository_url: e.target.value } }))} placeholder="https://github.com/org/repo" value={data.github.repository_url} />
             <input aria-label="Branche par défaut" className="rounded-lg border p-2 text-sm" disabled={locked} onChange={(e) => setData((v) => ({ ...v, github: { ...v.github, default_branch: e.target.value } }))} value={data.github.default_branch} />
+            <label className="flex items-center gap-2 text-sm"><input aria-label="CI requise" checked={data.github.ci_required} disabled={locked} onChange={(e) => setData((v) => ({ ...v, github: { ...v.github, ci_required: e.target.checked } }))} type="checkbox" />CI requise pour intégrer</label>
+            <label className="flex items-center gap-2 text-sm"><input aria-label="CI configurée" checked={data.github.ci_configured} disabled={locked || !data.github.ci_required} onChange={(e) => setData((v) => ({ ...v, github: { ...v.github, ci_configured: e.target.checked } }))} type="checkbox" />Configuration CI présente et vérifiée</label>
             <textarea aria-label="Definition of Done" className="min-h-24 rounded-lg border p-2 text-sm" disabled={locked} onChange={(e) => setData((v) => ({ ...v, github: { ...v.github, definition_of_done: e.target.value.split("\n").filter(Boolean) } }))} placeholder="Un critère par ligne" value={definitionOfDone} />
             <button className="rounded-lg border px-4 py-2 text-sm font-bold disabled:opacity-40" disabled={locked || !!busy} onClick={() => void run("github", () => api.saveBuildGithub(phase.id, data.github, token))}>Enregistrer la préparation</button>
           </div>
