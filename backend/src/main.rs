@@ -2,6 +2,7 @@ mod auth;
 mod build;
 mod decisions;
 mod deliverables;
+mod deploy;
 mod design;
 mod models;
 mod overview;
@@ -70,6 +71,7 @@ fn app(state: AppState) -> Router {
         .nest("/api/v1", deliverables::routes::router())
         .nest("/api/v1", build::routes::router())
         .nest("/api/v1", design::routes::router())
+        .nest("/api/v1", deploy::routes::router())
         .nest("/api/v1", models::routes::router())
         .nest("/api/v1", requirements::routes::router())
         .nest("/api/v1", tasks::routes::router())

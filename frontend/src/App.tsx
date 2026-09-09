@@ -4,6 +4,7 @@ import { ModelWorkspace } from "./ModelWorkspace";
 import { DesignWorkspace } from "./DesignWorkspace";
 import { BuildWorkspace } from "./BuildWorkspace";
 import { TestWorkspace } from "./TestWorkspace";
+import { DeployWorkspace } from "./DeployWorkspace";
 import {
   api,
   type Project,
@@ -339,6 +340,7 @@ function Dashboard({
   const design = overview.phases.find((phase) => phase.phase_type === "DESIGN");
   const build = overview.phases.find((phase) => phase.phase_type === "BUILD");
   const testing = overview.phases.find((phase) => phase.phase_type === "TEST");
+  const deploy = overview.phases.find((phase) => phase.phase_type === "DEPLOY");
   const metrics = [
     [overview.requirement_count, "Exigences"],
     [overview.open_task_count, "Tâches ouvertes"],
@@ -552,6 +554,9 @@ function Dashboard({
             )}
             {testing && testing.status !== "LOCKED" && token && onRefresh && (
               <TestWorkspace onChanged={onRefresh} phase={testing} token={token} />
+            )}
+            {deploy && deploy.status !== "LOCKED" && token && onRefresh && (
+              <DeployWorkspace onChanged={onRefresh} phase={deploy} token={token} />
             )}
             <section
               className="mt-14 grid gap-4 xl:grid-cols-[1.4fr_0.6fr]"

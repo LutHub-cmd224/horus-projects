@@ -168,6 +168,7 @@ async fn create_project(
     let mut design_phase_id = None;
     let mut build_phase_id = None;
     let mut test_phase_id = None;
+    let mut deploy_phase_id = None;
     for (phase_type, position, status) in phases {
         let phase_id = sqlx::query_scalar::<_, Uuid>(
             "INSERT INTO phases (project_id, phase_type, position, status) VALUES ($1, $2::phase_type, $3, $4::phase_status) RETURNING id",
@@ -189,6 +190,8 @@ async fn create_project(
             build_phase_id = Some(phase_id);
         } else if position == 5 {
             test_phase_id = Some(phase_id);
+        } else if position == 6 {
+            deploy_phase_id = Some(phase_id);
         }
     }
 
@@ -229,6 +232,20 @@ async fn create_project(
             .execute(&mut *tx)
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+    let deploy_phase_id = deploy_phase_id.ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    for (code, label) in [
+        ("test_report_available", "Validated Test Report available"),
+        ("production_configured", "Production configuration complete"),
+        ("migrations_prepared", "Database migrations addressed"),
+        ("backups_ready", "Backups addressed"),
+        ("healthcheck_defined", "Healthcheck addressed"),
+        ("monitoring_ready", "Monitoring addressed"),
+        ("rollback_defined", "Rollback plan defined"),
+        ("deployment_confirmed", "Deployment confirmed"),
+        ("release_report_ready", "Release Report ready"),
+    ] {
+        sqlx::query("INSERT INTO validation_criteria(phase_id,code,label,required,completed) VALUES($1,$2,$3,true,false)").bind(deploy_phase_id).bind(code).bind(label).execute(&mut *tx).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     }
     let test_phase_id = test_phase_id.ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
     for (code, label) in [
