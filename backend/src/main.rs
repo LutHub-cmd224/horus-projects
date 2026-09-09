@@ -45,8 +45,8 @@ async fn health() -> Json<HealthResponse> {
 }
 
 fn cors_layer() -> CorsLayer {
-    let frontend_origin = std::env::var("FRONTEND_ORIGIN")
-        .unwrap_or_else(|_| "http://localhost:3000".to_string());
+    let frontend_origin =
+        std::env::var("FRONTEND_ORIGIN").unwrap_or_else(|_| "http://localhost:3000".to_string());
     let origin = frontend_origin
         .parse::<HeaderValue>()
         .expect("FRONTEND_ORIGIN must be a valid HTTP origin");
