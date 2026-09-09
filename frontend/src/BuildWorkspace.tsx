@@ -1,178 +1,20 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { api, type BuildWorkspaceData, type OverviewPhase } from "./api";
+import { AdvancedSection, GuidedQuestion, NextAction } from "./GuidedUx";
 
-const empty: BuildWorkspaceData = {
-  design_pack_ready: false,
-  requirements: [],
-  tasks: [],
-  decisions: [],
-  github: {
-    repository_url: "",
-    default_branch: "main",
-    integration_strategy: "PULL_REQUEST",
-    ci_required: true,
-    ci_configured: false,
-    definition_of_done: [],
-  },
-  progress: { total: 0, done: 0, blocked: 0, percent: 0 },
-  artifacts: [],
-};
-
-export function BuildWorkspace({
-  phase,
-  token,
-  onChanged,
-}: {
-  phase: OverviewPhase;
-  token: string;
-  onChanged: () => Promise<void>;
-}) {
-  const [data, setData] = useState(empty);
-  const [taskTitle, setTaskTitle] = useState("");
-  const [requirementId, setRequirementId] = useState("");
-  const [decisionTitle, setDecisionTitle] = useState("");
-  const [decisionText, setDecisionText] = useState("");
-  const [busy, setBusy] = useState("");
-  const [error, setError] = useState("");
-  const locked = phase.status === "LOCKED" || phase.status === "VALIDATED";
-
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .build(phase.id, token)
-      .then((value) => {
-        if (!cancelled) {
-          setData(value);
-          setRequirementId(value.requirements[0]?.id ?? "");
-        }
-      })
-      .catch(() => !cancelled && setError("Impossible de charger le Build."));
-    return () => {
-      cancelled = true;
-    };
-  }, [phase.id, token]);
-
-  async function run(label: string, action: () => Promise<BuildWorkspaceData>) {
-    setBusy(label);
-    setError("");
-    try {
-      setData(await action());
-      await onChanged();
-    } catch {
-      setError("Action impossible : vérifiez les prérequis du Build.");
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function addTask(event: FormEvent) {
-    event.preventDefault();
-    if (!requirementId) return;
-    await run("task", () =>
-      api.createBuildTask(
-        phase.id,
-        {
-          requirement_id: requirementId,
-          title: taskTitle,
-          priority: "MEDIUM",
-        },
-        token,
-      ),
-    );
-    setTaskTitle("");
-  }
-
-  async function addDecision(event: FormEvent) {
-    event.preventDefault();
-    await run("decision", () =>
-      api.createBuildDecision(
-        phase.id,
-        { title: decisionTitle, decision: decisionText, status: "ACCEPTED" },
-        token,
-      ),
-    );
-    setDecisionTitle("");
-    setDecisionText("");
-  }
-
-  const definitionOfDone = data.github.definition_of_done
-    .map((item) => String(item))
-    .join("\n");
-
-  return (
-    <section
-      className="mt-14 rounded-[2rem] border border-black/10 bg-white/55 p-6 sm:p-8"
-      id="build-workspace"
-    >
-      <p className="text-xs font-semibold uppercase tracking-[.2em] text-[#d9503f]">
-        Phase 04 · Coder
-      </p>
-      <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 className="text-4xl font-semibold">Piloter l’implémentation.</h2>
-          <p className="mt-2 text-sm text-black/50">
-            Design Pack → backlog traçable → exécution GitHub.
-          </p>
-        </div>
-        <div className="min-w-48">
-          <div className="flex justify-between text-xs font-semibold">
-            <span>{data.progress.done}/{data.progress.total} terminées</span>
-            <span>{data.progress.percent}%</span>
-          </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-black/10">
-            <div
-              className="h-full bg-[#d9503f]"
-              style={{ width: `${data.progress.percent}%` }}
-            />
-          </div>
-        </div>
-      </div>
-      {!data.design_pack_ready && (
-        <p className="mt-5 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
-          Le Design Pack validé est requis avant de générer le Build Plan.
-        </p>
-      )}
-      <div className="mt-8 grid gap-5 lg:grid-cols-2">
-        <article className="rounded-2xl border border-black/10 p-5">
-          <h3 className="font-semibold">Backlog d’implémentation</h3>
-          <form className="mt-4 grid gap-2" onSubmit={(e) => void addTask(e)}>
-            <input className="rounded-lg border p-2 text-sm" disabled={locked} onChange={(e) => setTaskTitle(e.target.value)} placeholder="Nouvelle tâche" required value={taskTitle} />
-            <select className="rounded-lg border p-2 text-sm" disabled={locked} onChange={(e) => setRequirementId(e.target.value)} required value={requirementId}>
-              <option value="">Exigence liée…</option>
-              {data.requirements.map((requirement) => <option key={requirement.id} value={requirement.id}>{requirement.code} — {requirement.title}</option>)}
-            </select>
-            <button className="rounded-lg bg-black px-4 py-2 text-sm font-bold text-white disabled:opacity-40" disabled={locked || !!busy}>Ajouter au backlog</button>
-          </form>
-          <div className="mt-4 space-y-2">
-            {data.tasks.map((task) => <div className="flex items-center gap-3 rounded-xl bg-black/[.035] p-3" key={task.id}><div className="min-w-0 flex-1"><p className="text-xs text-black/40">{task.code} · {task.priority}</p><p className="truncate text-sm font-semibold">{task.title}</p></div><select aria-label={`Statut ${task.code}`} className="rounded-lg border p-2 text-xs" disabled={locked || !!busy} onChange={(e) => void run("status", () => api.updateBuildTask(phase.id, task.id, e.target.value, token))} value={task.status}>{["TODO","IN_PROGRESS","BLOCKED","DONE","CANCELLED"].map((status) => <option key={status}>{status}</option>)}</select></div>)}
-          </div>
-        </article>
-        <article className="rounded-2xl border border-black/10 p-5">
-          <h3 className="font-semibold">Préparation GitHub</h3>
-          <div className="mt-4 grid gap-2">
-            <input aria-label="Dépôt GitHub" className="rounded-lg border p-2 text-sm" disabled={locked} onChange={(e) => setData((v) => ({ ...v, github: { ...v.github, repository_url: e.target.value } }))} placeholder="https://github.com/org/repo" value={data.github.repository_url} />
-            <input aria-label="Branche par défaut" className="rounded-lg border p-2 text-sm" disabled={locked} onChange={(e) => setData((v) => ({ ...v, github: { ...v.github, default_branch: e.target.value } }))} value={data.github.default_branch} />
-            <label className="flex items-center gap-2 text-sm"><input aria-label="CI requise" checked={data.github.ci_required} disabled={locked} onChange={(e) => setData((v) => ({ ...v, github: { ...v.github, ci_required: e.target.checked } }))} type="checkbox" />CI requise pour intégrer</label>
-            <label className="flex items-center gap-2 text-sm"><input aria-label="CI configurée" checked={data.github.ci_configured} disabled={locked || !data.github.ci_required} onChange={(e) => setData((v) => ({ ...v, github: { ...v.github, ci_configured: e.target.checked } }))} type="checkbox" />Configuration CI présente et vérifiée</label>
-            <textarea aria-label="Definition of Done" className="min-h-24 rounded-lg border p-2 text-sm" disabled={locked} onChange={(e) => setData((v) => ({ ...v, github: { ...v.github, definition_of_done: e.target.value.split("\n").filter(Boolean) } }))} placeholder="Un critère par ligne" value={definitionOfDone} />
-            <button className="rounded-lg border px-4 py-2 text-sm font-bold disabled:opacity-40" disabled={locked || !!busy} onClick={() => void run("github", () => api.saveBuildGithub(phase.id, data.github, token))}>Enregistrer la préparation</button>
-          </div>
-        </article>
-        <article className="rounded-2xl border border-black/10 p-5 lg:col-span-2">
-          <h3 className="font-semibold">Décisions techniques d’exécution</h3>
-          <form className="mt-4 grid gap-2 sm:grid-cols-2" onSubmit={(e) => void addDecision(e)}>
-            <input className="rounded-lg border p-2 text-sm" disabled={locked} onChange={(e) => setDecisionTitle(e.target.value)} placeholder="Titre de la décision" required value={decisionTitle} />
-            <input className="rounded-lg border p-2 text-sm" disabled={locked} onChange={(e) => setDecisionText(e.target.value)} placeholder="Décision retenue" required value={decisionText} />
-            <button className="rounded-lg bg-black px-4 py-2 text-sm font-bold text-white disabled:opacity-40 sm:col-span-2" disabled={locked || !!busy}>Consigner comme acceptée</button>
-          </form>
-          <div className="mt-4 flex flex-wrap gap-2">{data.decisions.map((decision) => <span className="rounded-full border px-3 py-1 text-xs" key={decision.id}>{decision.code} · {decision.title} · {decision.status}</span>)}</div>
-        </article>
-      </div>
-      {error && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-      <div className="mt-6 flex flex-wrap gap-3">
-        <button className="rounded-full bg-[#d9503f] px-5 py-2 text-sm font-bold text-white disabled:opacity-35" disabled={locked || !!busy} onClick={() => void (async () => { setBusy("plan"); setError(""); try { await api.generateBuildPlan(phase.id, token); setData(await api.build(phase.id, token)); await onChanged(); } catch { setError("Complétez le Design Pack, le backlog, les liens, une décision acceptée et GitHub."); } finally { setBusy(""); } })()}>{data.artifacts.includes("BUILD_PLAN") ? "✓ Régénérer le Build Plan" : "Générer le Build Plan"}</button>
-        <button className="rounded-full border border-black px-5 py-2 text-sm font-bold disabled:opacity-35" disabled={locked || !!busy || !data.artifacts.includes("BUILD_PLAN")} onClick={() => void (async () => { setBusy("validate"); try { await api.validatePhase(phase.id, token, "Build Plan prêt pour la phase Tester"); await onChanged(); } catch { setError("Le Build Plan doit être prêt."); } finally { setBusy(""); } })()}>{phase.status === "VALIDATED" ? "Phase validée" : "Valider Coder →"}</button>
-      </div>
-    </section>
-  );
+const empty: BuildWorkspaceData={design_pack_ready:false,requirements:[],tasks:[],decisions:[],github:{repository_url:"",default_branch:"main",integration_strategy:"PULL_REQUEST",ci_required:true,ci_configured:false,definition_of_done:[]},progress:{total:0,done:0,blocked:0,percent:0},artifacts:[]};
+const statuses:Record<string,string>={TODO:"À faire",IN_PROGRESS:"En cours",BLOCKED:"Bloqué",DONE:"Terminé",CANCELLED:"Annulé"};
+export function BuildWorkspace({phase,token,onChanged}:{phase:OverviewPhase;token:string;onChanged:()=>Promise<void>}){
+ const [data,setData]=useState(empty);const [title,setTitle]=useState("");const [why,setWhy]=useState("");const [requirement,setRequirement]=useState("");const [busy,setBusy]=useState("");const [error,setError]=useState("");const locked=phase.status==="LOCKED"||phase.status==="VALIDATED";
+ useEffect(()=>{let stop=false;api.build(phase.id,token).then(value=>{if(!stop){setData(value);setRequirement(value.requirements[0]?.id??"")}}).catch(()=>!stop&&setError("Impossible de charger ce qu’il faut construire."));return()=>{stop=true}},[phase.id,token]);
+ async function run(label:string,action:()=>Promise<BuildWorkspaceData>){setBusy(label);setError("");try{setData(await action());await onChanged()}catch{setError("Cette action n’est pas encore possible. Vérifie l’indication « Prochaine étape ».")}finally{setBusy("")}}
+ async function add(event:FormEvent){event.preventDefault();if(!requirement)return;await run("task",()=>api.createBuildTask(phase.id,{requirement_id:requirement,title,description:why,priority:"MEDIUM"},token));setTitle("");setWhy("")}
+ async function plan(){setBusy("plan");setError("");try{await api.generateBuildPlan(phase.id,token);setData(await api.build(phase.id,token));await onChanged()}catch{setError("Pour préparer le plan, termine la checklist, relie chaque élément à un besoin, indique où se trouve le code et consigne un choix d’exécution.")}finally{setBusy("")}}
+ const missing=!data.design_pack_ready?"La conception doit d’abord être terminée.":data.tasks.length===0?"Ajoute ce qu’il faut construire.":data.tasks.some(task=>!task.requirement_id)?"Relie chaque élément à un besoin du produit.":!data.github.repository_url?"Indique où est stocké le code du projet.":data.github.ci_required&&!data.github.ci_configured?"Indique comment le code est vérifié avant d’être ajouté.":data.decisions.length===0?"Consigne un choix d’exécution dans les détails techniques.":!data.artifacts.includes("BUILD_PLAN")?"Demande à HORUS de préparer le plan de réalisation.":"Le plan est prêt : termine cette étape.";
+ return <section className="mt-14 rounded-[2rem] border border-black/10 bg-white/55 p-6 sm:p-8" id="build-workspace"><p className="text-xs font-semibold uppercase tracking-[.2em] text-[#d9503f]">Phase 04 · Construire</p><h2 className="mt-3 text-4xl font-semibold">Que faut-il construire pour obtenir une première version utilisable ?</h2><p className="mt-2 text-sm text-black/50">HORUS transforme les besoins déjà définis en checklist claire.</p><div className="mt-5 flex items-center gap-3"><div className="h-2 flex-1 rounded-full bg-black/10"><div className="h-full rounded-full bg-[#d9503f]" style={{width:`${data.progress.percent}%`}}/></div><span className="text-sm font-semibold">{data.progress.done}/{data.progress.total} terminés</span></div>{!data.design_pack_ready&&<p className="mt-5 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">HORUS attend que la conception soit terminée avant de préparer le plan.</p>}<div className="mt-8 space-y-5">
+ <GuidedQuestion complete={data.tasks.length>0} help="Choisis le besoin auquel cet élément répond. Cela permet de ne rien construire inutilement." example="Créer l’écran qui permet à une personne d’ajouter un projet." number={1} title="Ajoute les éléments à construire"><form className="grid gap-2" onSubmit={e=>void add(e)}><select aria-label="Besoin du produit" className="rounded-xl border p-3" disabled={locked} onChange={e=>setRequirement(e.target.value)} required value={requirement}><option value="">Choisir le besoin concerné…</option>{data.requirements.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select><input aria-label="Ce qu’il faut construire" className="rounded-xl border p-3" disabled={locked} onChange={e=>setTitle(e.target.value)} placeholder="Ce qu’il faut construire" required value={title}/><input aria-label="Pourquoi le construire" className="rounded-xl border p-3" disabled={locked} onChange={e=>setWhy(e.target.value)} placeholder="Pourquoi est-ce utile ?" value={why}/><button className="rounded-xl bg-black px-4 py-3 text-sm font-bold text-white disabled:opacity-35" disabled={locked||!!busy}>Ajouter à la checklist</button></form><div className="mt-4 space-y-2">{data.tasks.map(task=><label className="flex items-center gap-3 rounded-xl bg-black/[.035] p-3" key={task.id}><input checked={task.status==="DONE"} disabled={locked||!!busy} onChange={e=>void run("status",()=>api.updateBuildTask(phase.id,task.id,e.target.checked?"DONE":"TODO",token))} type="checkbox"/><span className="min-w-0 flex-1"><strong className="block text-sm">{task.title}</strong><span className="text-xs text-black/45">{task.description||"Lié à un besoin du produit"}</span></span><select aria-label={`État de ${task.title}`} className="rounded-lg border p-2 text-xs" disabled={locked||!!busy} onChange={e=>void run("status",()=>api.updateBuildTask(phase.id,task.id,e.target.value,token))} value={task.status}>{Object.entries(statuses).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>)}</div></GuidedQuestion>
+ <GuidedQuestion complete={!!data.github.repository_url} help="Colle simplement l’adresse de l’espace qui contient le code." example="https://github.com/mon-equipe/mon-projet" number={2} title="Où est stocké le code du projet ?"><input aria-label="Adresse du code" className="w-full rounded-xl border p-3" disabled={locked} onChange={e=>setData(value=>({...value,github:{...value.github,repository_url:e.target.value}}))} placeholder="Adresse GitHub du projet" value={data.github.repository_url}/></GuidedQuestion>
+ <GuidedQuestion complete={!data.github.ci_required||data.github.ci_configured} help="HORUS peut exiger une vérification automatique avant qu’un changement rejoigne le projet." number={3} title="Comment vérifier que le code fonctionne avant de l’ajouter au projet ?"><div className="flex flex-wrap gap-3"><label className="rounded-xl border p-3 text-sm"><input checked={!data.github.ci_required} disabled={locked} onChange={()=>setData(value=>({...value,github:{...value.github,ci_required:false,ci_configured:false}}))} type="radio"/> Aucune vérification automatique requise</label><label className="rounded-xl border p-3 text-sm"><input checked={data.github.ci_required} disabled={locked} onChange={()=>setData(value=>({...value,github:{...value.github,ci_required:true}}))} type="radio"/> Vérification automatique</label></div>{data.github.ci_required&&<label className="mt-3 flex gap-2 text-sm"><input aria-label="Vérification automatique configurée" checked={data.github.ci_configured} disabled={locked} onChange={e=>setData(value=>({...value,github:{...value.github,ci_configured:e.target.checked}}))} type="checkbox"/>La vérification est déjà configurée</label>}<button className="mt-4 rounded-xl border border-black px-4 py-2 text-sm font-bold" disabled={locked||!!busy} onClick={()=>void run("github",()=>api.saveBuildGithub(phase.id,{...data.github,definition_of_done:data.github.definition_of_done.length?data.github.definition_of_done:["Chaque élément est terminé","Les vérifications réussissent"]},token))} type="button">Enregistrer ces informations</button></GuidedQuestion>
+ <AdvancedSection><p className="text-sm text-black/50">Branche principale : {data.github.default_branch}. Stratégie : {data.github.integration_strategy}. Vérification continue (CI) : {data.github.ci_required?"requise":"non requise"}.</p><button className="mt-4 rounded-xl border px-4 py-2 text-sm" disabled={locked||!!busy} onClick={()=>void run("decision",()=>api.createBuildDecision(phase.id,{title:"Organisation de la réalisation",decision:"Les changements sont relus et vérifiés avant intégration",status:"ACCEPTED"},token))} type="button">Consigner le choix d’exécution proposé</button></AdvancedSection>
+ </div>{error&&<p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}<div className="mt-6 flex flex-wrap gap-3"><button className="rounded-full bg-[#d9503f] px-5 py-3 text-sm font-bold text-white disabled:opacity-35" disabled={locked||!!busy} onClick={()=>void plan()} type="button">{data.artifacts.includes("BUILD_PLAN")?"✓ Mettre à jour le plan":"Préparer le plan de réalisation"}</button><button className="rounded-full border border-black px-5 py-3 text-sm font-bold disabled:opacity-35" disabled={locked||!!busy||!data.artifacts.includes("BUILD_PLAN")} onClick={()=>void api.validatePhase(phase.id,token,"Plan de réalisation prêt").then(onChanged).catch(()=>setError("Le plan de réalisation doit être prêt."))} type="button">Terminer cette étape →</button></div><div className="mt-5"><NextAction>{missing}</NextAction></div></section>;
 }
