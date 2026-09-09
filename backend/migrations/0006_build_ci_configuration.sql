@@ -1,0 +1,2 @@
+ALTER TABLE build_profiles
+ADD COLUMN IF NOT EXISTS ci_configured BOOLEAN NOT NULL DEFAULT false;

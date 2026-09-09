@@ -90,6 +90,36 @@ export type DesignWorkspaceData = {
   decisions: unknown[];
   artifacts: string[];
 };
+export type BuildWorkspaceData = {
+  design_pack_ready: boolean;
+  requirements: { id: string; code: string; title: string; status: string }[];
+  tasks: {
+    id: string;
+    requirement_id: string | null;
+    code: string;
+    title: string;
+    description: string | null;
+    status: string;
+    priority: string;
+  }[];
+  decisions: {
+    id: string;
+    code: string;
+    title: string;
+    decision: string;
+    status: string;
+  }[];
+  github: {
+    repository_url: string;
+    default_branch: string;
+    integration_strategy: "PULL_REQUEST" | "TRUNK_BASED" | "GIT_FLOW";
+    ci_required: boolean;
+    ci_configured: boolean;
+    definition_of_done: unknown[];
+  };
+  progress: { total: number; done: number; blocked: number; percent: number };
+  artifacts: string[];
+};
 export type ProjectOverview = {
   project: {
     id: string;
@@ -202,6 +232,60 @@ export const api = {
   generateDesignArtifact: (phaseId: string, kind: string, token: string) =>
     request<unknown>(
       `/phases/${phaseId}/design/artifacts/${kind}`,
+      { method: "POST" },
+      token,
+    ),
+  build: (phaseId: string, token: string) =>
+    request<BuildWorkspaceData>(`/phases/${phaseId}/build`, {}, token),
+  saveBuildGithub: (
+    phaseId: string,
+    github: BuildWorkspaceData["github"],
+    token: string,
+  ) =>
+    request<BuildWorkspaceData>(
+      `/phases/${phaseId}/build/github`,
+      { method: "PUT", body: JSON.stringify(github) },
+      token,
+    ),
+  createBuildTask: (
+    phaseId: string,
+    task: {
+      requirement_id: string;
+      title: string;
+      description?: string;
+      priority: string;
+    },
+    token: string,
+  ) =>
+    request<BuildWorkspaceData>(
+      `/phases/${phaseId}/build/tasks`,
+      { method: "POST", body: JSON.stringify(task) },
+      token,
+    ),
+  updateBuildTask: (
+    phaseId: string,
+    taskId: string,
+    status: string,
+    token: string,
+  ) =>
+    request<BuildWorkspaceData>(
+      `/phases/${phaseId}/build/tasks/${taskId}`,
+      { method: "PATCH", body: JSON.stringify({ status }) },
+      token,
+    ),
+  createBuildDecision: (
+    phaseId: string,
+    decision: { title: string; decision: string; status: string },
+    token: string,
+  ) =>
+    request<BuildWorkspaceData>(
+      `/phases/${phaseId}/build/decisions`,
+      { method: "POST", body: JSON.stringify(decision) },
+      token,
+    ),
+  generateBuildPlan: (phaseId: string, token: string) =>
+    request<unknown>(
+      `/phases/${phaseId}/build/artifacts/BUILD_PLAN`,
       { method: "POST" },
       token,
     ),
