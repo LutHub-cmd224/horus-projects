@@ -12,8 +12,8 @@ export function DesignWorkspace({phase,token,onChanged}:{phase:OverviewPhase;tok
   const locked=phase.status==="VALIDATED";
   useEffect(()=>{let stop=false;api.design(phase.id,token).then(value=>{if(!stop){setData(value);setError("")}}).catch(()=>!stop&&setError("Impossible de charger cette étape."));return()=>{stop=true}},[phase.id,token]);
   const steps=[data.ux_flows.length>0,data.components.length>0,data.features.length>0,data.security_controls.length>0,data.artifacts.includes("DESIGN_PACK")]; const done=steps.filter(Boolean).length;
-  const toggleDoc=(key:"ux_flows"|"features"|"security_controls",title:string)=>{setError("");setData(value=>{const exists=value[key].some(item=>text(item,"title")===title);return {...value,[key]:exists?value[key].filter(item=>text(item,"title")!==title):[...value[key],{title,description:title}]}})};
-  const addDoc=(key:"ux_flows"|"features"|"security_controls",title:string)=>{setError("");setData(value=>value[key].some(item=>text(item,"title")===title)?value:{...value,[key]:[...value[key],{title,description:title}]}))};
+  const toggleDoc=(key:"ux_flows"|"features"|"security_controls",title:string)=>{setError("");setData(value=>{const exists=value[key].some(item=>text(item,"title")===title);return {...value,[key]:exists?value[key].filter(item=>text(item,"title")!==title):[...value[key],{title,description:title}]};});};
+  const addDoc=(key:"ux_flows"|"features"|"security_controls",title:string)=>{setError("");setData(value=>value[key].some(item=>text(item,"title")===title)?value:{...value,[key]:[...value[key],{title,description:title}]});};
   function proposal(base:DesignWorkspaceData){
     const selected=platforms.length?platforms:["Site web"];
     const services=integrations.filter(x=>x!=="Aucune intégration");
