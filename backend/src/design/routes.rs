@@ -83,7 +83,7 @@ async fn workspace(s: &AppState, p: Uuid) -> Result<DesignWorkspace, StatusCode>
     {
         docs.insert(k, v);
     }
-    let artifacts=sqlx::query_scalar::<_,String>("SELECT replace(type,'DESIGN_','') FROM deliverables WHERE phase_id=$1 AND type LIKE 'DESIGN_%' AND deleted_at IS NULL").bind(p).fetch_all(&s.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
+    let artifacts=sqlx::query_scalar::<_,String>("SELECT substring(type FROM 8) FROM deliverables WHERE phase_id=$1 AND type LIKE 'DESIGN_%' AND deleted_at IS NULL").bind(p).fetch_all(&s.db).await.map_err(|_|StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(DesignWorkspace {
         components,
         connections,
