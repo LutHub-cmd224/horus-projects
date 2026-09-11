@@ -1,15 +1,13 @@
-CREATE OR REPLACE FUNCTION horus_prepare_build_backlog(p_project_id UUID)
+CREATE OR REPLACE FUNCTION horus_prepare_build_requirements(p_project_id UUID)
 RETURNS VOID
 LANGUAGE plpgsql
 AS $$
 DECLARE
     v_created_by UUID;
-    v_build_phase UUID;
 BEGIN
     SELECT created_by INTO v_created_by FROM projects WHERE id = p_project_id AND deleted_at IS NULL;
-    SELECT id INTO v_build_phase FROM phases WHERE project_id = p_project_id AND phase_type = 'BUILD';
 
-    IF v_created_by IS NULL OR v_build_phase IS NULL THEN
+    IF v_created_by IS NULL THEN
         RETURN;
     END IF;
 
@@ -48,57 +46,27 @@ BEGIN
         FROM numbered
         ON CONFLICT DO NOTHING;
     END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM tasks WHERE phase_id = v_build_phase AND deleted_at IS NULL
-    ) THEN
-        WITH source AS (
-            SELECT id, title, description, row_number() OVER (ORDER BY code) AS rn
-            FROM requirements
-            WHERE project_id = p_project_id AND deleted_at IS NULL AND status <> 'REJECTED'
-        )
-        INSERT INTO tasks(project_id, requirement_id, phase_id, code, title, description, status, priority, created_by)
-        SELECT
-            p_project_id,
-            id,
-            v_build_phase,
-            'TASK-AUTO-' || lpad(rn::TEXT, 3, '0'),
-            left(title, 180),
-            COALESCE(description, 'Élément proposé automatiquement par HORUS.'),
-            'TODO'::task_status,
-            'MEDIUM'::priority_level,
-            v_created_by
-        FROM source
-        ON CONFLICT DO NOTHING;
-    END IF;
-
-    UPDATE validation_criteria
-    SET completed = true,
-        completed_by = v_created_by,
-        completed_at = COALESCE(completed_at, now())
-    WHERE phase_id = v_build_phase
-      AND code IN ('backlog_ready','requirements_linked')
-      AND EXISTS (SELECT 1 FROM tasks WHERE phase_id = v_build_phase AND deleted_at IS NULL);
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION horus_prepare_build_backlog_after_design_validation()
+CREATE OR REPLACE FUNCTION horus_prepare_build_requirements_after_design_validation()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 BEGIN
     IF NEW.phase_type = 'DESIGN' AND NEW.status = 'VALIDATED' AND OLD.status IS DISTINCT FROM NEW.status THEN
-        PERFORM horus_prepare_build_backlog(NEW.project_id);
+        PERFORM horus_prepare_build_requirements(NEW.project_id);
     END IF;
     RETURN NEW;
 END;
 $$;
 
 DROP TRIGGER IF EXISTS trg_horus_prepare_build_backlog ON phases;
-CREATE TRIGGER trg_horus_prepare_build_backlog
+DROP TRIGGER IF EXISTS trg_horus_prepare_build_requirements ON phases;
+CREATE TRIGGER trg_horus_prepare_build_requirements
 AFTER UPDATE OF status ON phases
 FOR EACH ROW
-EXECUTE FUNCTION horus_prepare_build_backlog_after_design_validation();
+EXECUTE FUNCTION horus_prepare_build_requirements_after_design_validation();
 
 DO $$
 DECLARE
@@ -109,7 +77,7 @@ BEGIN
         FROM phases
         WHERE phase_type = 'DESIGN' AND status = 'VALIDATED'
     LOOP
-        PERFORM horus_prepare_build_backlog(project_row.project_id);
+        PERFORM horus_prepare_build_requirements(project_row.project_id);
     END LOOP;
 END;
 $$;
